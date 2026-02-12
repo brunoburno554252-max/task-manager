@@ -1,5 +1,4 @@
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity, CheckCircle2, PlusCircle, Pencil, Trash2, Award, ArrowRight,
@@ -15,12 +14,12 @@ const actionIcons: Record<string, typeof Activity> = {
 };
 
 const actionColors: Record<string, string> = {
-  created: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-  updated: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
-  deleted: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-  status_changed: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
-  earned_badge: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
-  completed: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+  created: "bg-blue-500/15 text-blue-400",
+  updated: "bg-amber-500/15 text-amber-400",
+  deleted: "bg-red-500/15 text-red-400",
+  status_changed: "bg-purple-500/15 text-purple-400",
+  earned_badge: "bg-emerald-500/15 text-emerald-400",
+  completed: "bg-emerald-500/15 text-emerald-400",
 };
 
 export default function ActivityPage() {
@@ -29,13 +28,10 @@ export default function ActivityPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="space-y-3">
+        <Skeleton className="h-10 w-48" />
+        <div className="space-y-2">
           {[...Array(10)].map((_, i) => (
-            <Skeleton key={i} className="h-16 rounded-xl" />
+            <Skeleton key={i} className="h-14 rounded-xl" />
           ))}
         </div>
       </div>
@@ -60,52 +56,48 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Activity className="h-6 w-6 text-primary" />
-          Histórico de Atividades
-        </h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-2xl font-bold tracking-tight">Atividades</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           Acompanhe todas as ações realizadas na plataforma.
         </p>
       </div>
 
       {activities && activities.length > 0 ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {Object.entries(grouped).map(([date, items]) => (
             <div key={date}>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3 capitalize">{date}</h3>
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-0 divide-y divide-border">
+              <h3 className="text-xs font-medium text-muted-foreground mb-2 capitalize px-1">{date}</h3>
+              <div className="stat-card overflow-hidden" style={{ "--stat-accent": "oklch(0.65 0.2 310)" } as React.CSSProperties}>
+                <div className="divide-y divide-border/30">
                   {items?.map((a) => {
                     const Icon = actionIcons[a.action] ?? Activity;
-                    const colorClass = actionColors[a.action] ?? "bg-muted text-muted-foreground";
+                    const colorClass = actionColors[a.action] ?? "bg-muted/30 text-muted-foreground";
 
                     return (
-                      <div key={a.id} className="flex items-start gap-3 p-4">
-                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
-                          <Icon className="h-4 w-4" />
+                      <div key={a.id} className="flex items-start gap-3 p-3.5 hover:bg-muted/10 transition-colors">
+                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
+                          <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm">{a.details ?? `${a.action} ${a.entityType}`}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="text-sm leading-relaxed">{a.details ?? `${a.action} ${a.entityType}`}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
                             {new Date(a.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </div>
                       </div>
                     );
                   })}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
           ))}
         </div>
       ) : (
-        <Card className="border-0 shadow-sm">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Activity className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">Nenhuma atividade registrada</p>
-          </CardContent>
-        </Card>
+        <div className="stat-card p-12 text-center" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+          <Activity className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-muted-foreground">Nenhuma atividade registrada</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">As ações realizadas aparecerão aqui.</p>
+        </div>
       )}
     </div>
   );

@@ -23,7 +23,7 @@ import {
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  LayoutDashboard, ListTodo, Trophy, Award, BarChart3,
+  LayoutDashboard, Columns3, Trophy, Award,
   Activity, LogOut, PanelLeft, User, Zap,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -34,10 +34,9 @@ import { Badge } from "./ui/badge";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: ListTodo, label: "Tarefas", path: "/tasks" },
+  { icon: Columns3, label: "Kanban", path: "/tasks" },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
-  { icon: BarChart3, label: "Relatórios", path: "/reports" },
   { icon: Activity, label: "Atividades", path: "/activity" },
 ];
 
@@ -67,19 +66,23 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
-        <div className="flex flex-col items-center gap-8 p-10 max-w-md w-full">
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary-foreground" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, oklch(0.72 0.19 280), transparent)' }} />
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full opacity-8" style={{ background: 'radial-gradient(circle, oklch(0.65 0.2 310), transparent)' }} />
+        </div>
+        <div className="relative flex flex-col items-center gap-8 p-10 max-w-md w-full">
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center glow-primary">
+                <Zap className="h-6 w-6 text-primary" />
               </div>
-              <span className="text-2xl font-bold tracking-tight">TaskFlow</span>
+              <span className="text-3xl font-bold tracking-tight gradient-text">TaskFlow</span>
             </div>
             <h1 className="text-xl font-semibold tracking-tight text-center text-foreground">
               Bem-vindo de volta
             </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
+            <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed">
               Faça login para acessar o painel de gestão de tarefas e acompanhar o desempenho da sua equipe.
             </p>
           </div>
@@ -88,7 +91,7 @@ export default function DashboardLayout({
               window.location.href = getLoginUrl();
             }}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all duration-300"
+            className="w-full shadow-lg hover:shadow-xl transition-all duration-300 font-semibold"
           >
             Entrar na plataforma
           </Button>
@@ -174,17 +177,17 @@ function DashboardLayoutContent({
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Toggle navigation"
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                    <Zap className="h-3.5 w-3.5 text-primary-foreground" />
+                  <div className="h-7 w-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                    <Zap className="h-3.5 w-3.5 text-primary" />
                   </div>
-                  <span className="font-semibold tracking-tight truncate text-sm">
+                  <span className="font-bold tracking-tight truncate text-sm gradient-text">
                     TaskFlow
                   </span>
                 </div>
@@ -193,7 +196,7 @@ function DashboardLayoutContent({
           </SidebarHeader>
 
           <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
+            <SidebarMenu className="px-2 py-1 space-y-0.5">
               {menuItems.map(item => {
                 const isActive = location === item.path;
                 return (
@@ -202,10 +205,10 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={`h-10 transition-all font-normal ${isActive ? "bg-primary/15 text-primary font-medium" : "hover:bg-sidebar-accent"}`}
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
@@ -218,9 +221,9 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0 bg-primary/10">
-                    <AvatarFallback className="text-xs font-medium bg-primary/10 text-primary">
+                <button className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-sidebar-accent transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
@@ -230,7 +233,7 @@ function DashboardLayoutContent({
                         {user?.name || "-"}
                       </p>
                       {user?.role === "admin" && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-semibold bg-primary/20 text-primary border-0">
                           Admin
                         </Badge>
                       )}
@@ -262,7 +265,7 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
+          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/30 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);
@@ -273,7 +276,7 @@ function DashboardLayoutContent({
 
       <SidebarInset>
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex border-b border-border/50 h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">

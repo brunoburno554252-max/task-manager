@@ -42,3 +42,15 @@
 - [x] Testes vitest para gamificação (ranking, badges)
 - [x] Testes vitest para atividades e usuários
 - [x] Todos os 16 testes passando
+
+## Refatoração v2
+- [x] Transformar página de Tarefas em Kanban com colunas por status
+- [x] Implementar drag-and-drop para mover tarefas entre colunas
+- [x] Facilitar criação rápida de tarefas direto no Kanban
+- [x] Remover página de Relatórios por equipe (foco em colaborador individual)
+- [x] Elevar design visual para nível premium/sofisticado em todas as páginas
+- [x] Melhorar Dashboard com visual mais rico e impactante
+- [x] Melhorar Ranking com visual mais elaborado
+- [x] Melhorar Conquistas com visual mais atraente
+- [x] Melhorar sidebar e layout geral
+- [x] Ajustar navegação (remover Relatórios do menu)

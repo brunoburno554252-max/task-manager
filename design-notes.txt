@@ -1,0 +1,9 @@
+Kanban screenshot review:
+- Three columns: Pendente, Em Andamento, Concluída - working correctly
+- Task cards showing title, description, priority badge, assignee
+- "Nova Tarefa" button visible in top right
+- Each column has add button
+- Dark theme consistent with dashboard
+- Cards have subtle borders and hover effects
+- Overall Kanban looks clean and functional
+- Need to run tests and verify everything works

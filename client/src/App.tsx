@@ -9,7 +9,6 @@ import Home from "./pages/Home";
 import Tasks from "./pages/Tasks";
 import Ranking from "./pages/Ranking";
 import Badges from "./pages/Badges";
-import Reports from "./pages/Reports";
 import ActivityPage from "./pages/ActivityPage";
 import Profile from "./pages/Profile";
 
@@ -21,7 +20,6 @@ function Router() {
         <Route path={"/tasks"} component={Tasks} />
         <Route path={"/ranking"} component={Ranking} />
         <Route path={"/badges"} component={Badges} />
-        <Route path={"/reports"} component={Reports} />
         <Route path={"/activity"} component={ActivityPage} />
         <Route path={"/profile"} component={Profile} />
         <Route component={NotFound} />
@@ -33,9 +31,9 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
-          <Toaster richColors position="top-right" />
+          <Toaster richColors position="top-right" theme="dark" />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

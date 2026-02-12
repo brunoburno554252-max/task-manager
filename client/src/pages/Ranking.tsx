@@ -1,140 +1,164 @@
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { Trophy, Medal, TrendingUp, Target, Crown } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Trophy, Zap, Target, Clock, TrendingUp, Crown,
+} from "lucide-react";
+
+const medals = ["🥇", "🥈", "🥉"];
 
 export default function Ranking() {
+  const { user } = useAuth();
   const { data: ranking, isLoading } = trpc.gamification.ranking.useQuery();
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-72" />
+        <Skeleton className="h-10 w-48" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
         </div>
-        <div className="space-y-3">
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="h-96 rounded-xl" />
       </div>
     );
   }
 
-  const maxPoints = ranking && ranking.length > 0 ? ranking[0].totalPoints : 1;
+  const top3 = ranking?.slice(0, 3) ?? [];
+  const rest = ranking?.slice(3) ?? [];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Trophy className="h-6 w-6 text-amber-500" />
-          Ranking de Produtividade
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Acompanhe o desempenho e a pontuação de cada colaborador.
+        <h1 className="text-2xl font-bold tracking-tight">Ranking</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Classificação de produtividade dos colaboradores.
         </p>
       </div>
 
       {/* Top 3 Podium */}
-      {ranking && ranking.length >= 3 && (
-        <div className="grid grid-cols-3 gap-3">
-          {[1, 0, 2].map((idx) => {
-            const u = ranking[idx];
-            if (!u) return null;
-            const position = idx + 1;
-            const colors = [
-              "from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 ring-amber-200 dark:ring-amber-800",
-              "from-slate-50 to-slate-100/50 dark:from-slate-950/30 dark:to-slate-800/20 ring-slate-200 dark:ring-slate-700",
-              "from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 ring-orange-200 dark:ring-orange-800",
-            ];
-            const icons = [Crown, Medal, Medal];
-            const iconColors = ["text-amber-500", "text-slate-400", "text-orange-400"];
-            const Icon = icons[idx];
-            const isFirst = idx === 0;
+      {top3.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Reorder: 2nd, 1st, 3rd for podium effect */}
+          {[top3[1], top3[0], top3[2]].filter(Boolean).map((r, displayIdx) => {
+            if (!r) return null;
+            const actualIdx = displayIdx === 0 ? 1 : displayIdx === 1 ? 0 : 2;
+            const isFirst = actualIdx === 0;
+            const isMe = r.id === user?.id;
+            const completionRate = r.totalAssigned > 0
+              ? Math.round((r.completedTasks / r.totalAssigned) * 100)
+              : 0;
 
             return (
-              <Card
-                key={u.id}
-                className={`border-0 shadow-sm bg-gradient-to-br ${colors[idx]} ${isFirst ? "ring-2 scale-105" : "ring-1"}`}
+              <div
+                key={r.id}
+                className={`stat-card p-5 text-center relative ${isFirst ? "md:-mt-4 md:mb-4" : ""} ${isMe ? "ring-1 ring-primary/40" : ""}`}
+                style={{
+                  "--stat-accent": isFirst
+                    ? "oklch(0.75 0.18 50)"
+                    : actualIdx === 1
+                    ? "oklch(0.7 0.12 250)"
+                    : "oklch(0.65 0.12 40)",
+                } as React.CSSProperties}
               >
-                <CardContent className="p-4 flex flex-col items-center text-center">
-                  <Icon className={`h-6 w-6 ${iconColors[idx]} mb-2`} />
-                  <div className={`h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-xl font-bold text-primary mb-2 ${isFirst ? "h-16 w-16" : ""}`}>
-                    {u.name?.charAt(0)?.toUpperCase() ?? "?"}
+                {isFirst && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Crown className="h-6 w-6 text-amber-400 drop-shadow-lg" />
                   </div>
-                  <p className="font-semibold text-sm truncate w-full">{u.name ?? "Sem nome"}</p>
-                  <p className="text-2xl font-bold text-primary mt-1">{u.totalPoints}</p>
-                  <p className="text-xs text-muted-foreground">pontos</p>
-                  <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
-                    <span>{u.completedTasks} concluídas</span>
+                )}
+                <div className="text-3xl mb-2">{medals[actualIdx]}</div>
+                <Avatar className="h-14 w-14 mx-auto mb-2">
+                  <AvatarFallback className={`text-lg font-bold ${isFirst ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"}`}>
+                    {r.name?.charAt(0)?.toUpperCase() ?? "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <h3 className="font-semibold text-sm truncate">{r.name ?? "Sem nome"}</h3>
+                <div className="flex items-center justify-center gap-1 mt-1">
+                  <Zap className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-lg font-bold">{r.totalPoints}</span>
+                  <span className="text-xs text-muted-foreground">pts</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 mt-3 pt-3 border-t border-border/30">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-400">{r.completedTasks}</p>
+                    <p className="text-[9px] text-muted-foreground">Concluídas</p>
                   </div>
-                </CardContent>
-              </Card>
+                  <div>
+                    <p className="text-sm font-bold text-blue-400">{r.onTimeTasks}</p>
+                    <p className="text-[9px] text-muted-foreground">No prazo</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">{completionRate}%</p>
+                    <p className="text-[9px] text-muted-foreground">Taxa</p>
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
       )}
 
-      {/* Full Ranking */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            Classificação Geral
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {ranking && ranking.length > 0 ? (
-            <div className="space-y-2">
-              {ranking.map((u, i) => {
-                const medals = ["🥇", "🥈", "🥉"];
-                const completionRate = u.totalAssigned > 0
-                  ? Math.round((u.completedTasks / u.totalAssigned) * 100)
-                  : 0;
-                const pointsPercent = maxPoints > 0 ? (u.totalPoints / maxPoints) * 100 : 0;
+      {/* Rest of Ranking */}
+      {rest.length > 0 && (
+        <div className="stat-card overflow-hidden" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+          <div className="divide-y divide-border/30">
+            {rest.map((r, i) => {
+              const isMe = r.id === user?.id;
+              const completionRate = r.totalAssigned > 0
+                ? Math.round((r.completedTasks / r.totalAssigned) * 100)
+                : 0;
 
-                return (
-                  <div
-                    key={u.id}
-                    className={`flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                      i === 0 ? "bg-amber-50/50 dark:bg-amber-950/10" : "hover:bg-muted/50"
-                    }`}
-                  >
-                    <span className="text-lg w-10 text-center font-semibold shrink-0">
-                      {i < 3 ? medals[i] : `${i + 1}º`}
-                    </span>
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
-                      {u.name?.charAt(0)?.toUpperCase() ?? "?"}
+              return (
+                <div
+                  key={r.id}
+                  className={`flex items-center gap-4 p-4 hover:bg-muted/20 transition-colors ${isMe ? "bg-primary/5" : ""}`}
+                >
+                  <span className="text-sm font-bold text-muted-foreground w-8 text-center">
+                    {i + 4}º
+                  </span>
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
+                      {r.name?.charAt(0)?.toUpperCase() ?? "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {r.name ?? "Sem nome"}
+                      {isMe && <span className="text-xs text-primary ml-2">(você)</span>}
+                    </p>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                    <div className="flex items-center gap-1">
+                      <Target className="h-3 w-3 text-emerald-400" />
+                      <span>{r.completedTasks}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium truncate">{u.name ?? "Sem nome"}</p>
-                        <p className="text-sm font-bold text-primary shrink-0 ml-2">{u.totalPoints} pts</p>
-                      </div>
-                      <Progress value={pointsPercent} className="h-1.5" />
-                      <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Target className="h-3 w-3" />
-                          {u.completedTasks}/{u.totalAssigned} tarefas
-                        </span>
-                        <span>{u.onTimeTasks} no prazo</span>
-                        <span>{completionRate}% conclusão</span>
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-blue-400" />
+                      <span>{r.onTimeTasks}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      <span>{completionRate}%</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16">
-              <Trophy className="h-12 w-12 text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground">Nenhum colaborador no ranking ainda</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Zap className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-sm font-bold">{r.totalPoints}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(!ranking || ranking.length === 0) && (
+        <div className="stat-card p-12 text-center" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+          <Trophy className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-muted-foreground">Nenhum colaborador no ranking ainda.</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">Complete tarefas para aparecer aqui!</p>
+        </div>
+      )}
     </div>
   );
 }
