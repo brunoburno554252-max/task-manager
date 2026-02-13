@@ -147,8 +147,16 @@ function formatDateShort(date: Date | string) {
 // ==================== DROPPABLE COLUMN ====================
 function DroppableColumn({ id, children, isOver }: { id: string; children: React.ReactNode; isOver?: boolean }) {
   const { setNodeRef } = useDroppable({ id });
+  const cfg = columnConfig[id as TaskStatus];
   return (
-    <div ref={setNodeRef} className={`space-y-3 flex-1 min-h-[200px] p-3 rounded-b-xl transition-all duration-300 ${isOver ? "bg-primary/5 ring-2 ring-primary/25 ring-offset-0" : ""}`}>
+    <div
+      ref={setNodeRef}
+      className={`space-y-3 flex-1 min-h-[200px] p-3 rounded-b-xl transition-all duration-150 ${
+        isOver
+          ? "ring-2 ring-primary/40 ring-offset-0 bg-primary/8 scale-[1.01] shadow-lg shadow-primary/10"
+          : ""
+      }`}
+    >
       {children}
     </div>
   );
@@ -175,9 +183,10 @@ function SortableTaskCard({
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.3 : 1,
+    transition: transition ? transition.replace(/\d+ms/g, '100ms') : undefined,
+    opacity: isDragging ? 0.25 : 1,
     cursor: isDragging ? "grabbing" : "grab",
+    willChange: isDragging ? 'transform' : undefined,
   };
   const pc = priorityConfig[task.priority];
   const PIcon = pc.icon;
@@ -807,8 +816,8 @@ export default function Tasks() {
   const { data: allUsers } = trpc.users.list.useQuery();
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } }),
     useSensor(KeyboardSensor)
   );
 
@@ -859,15 +868,38 @@ export default function Tasks() {
   });
 
   const statusMutation = trpc.tasks.updateStatus.useMutation({
-    onSuccess: () => {
+    onMutate: async ({ id, status: newStatus }) => {
+      // Cancel outgoing refetches
+      await utils.tasks.list.cancel();
+      // Snapshot previous data
+      const previousData = utils.tasks.list.getData({});
+      // Optimistically update the cache
+      utils.tasks.list.setData({}, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          tasks: old.tasks.map((t: any) =>
+            t.id === id ? { ...t, status: newStatus, completedAt: newStatus === 'completed' ? Date.now() : null } : t
+          ),
+        };
+      });
+      return { previousData };
+    },
+    onError: (err, _vars, context) => {
+      // Rollback on error
+      if (context?.previousData) {
+        utils.tasks.list.setData({}, context.previousData);
+      }
+      toast.error(err.message);
+    },
+    onSettled: () => {
+      // Sync with server after mutation
       utils.tasks.list.invalidate();
       utils.dashboard.stats.invalidate();
       utils.gamification.ranking.invalidate();
       utils.gamification.myBadges.invalidate();
       utils.activity.list.invalidate();
-      toast.success("Status atualizado!");
     },
-    onError: (err) => toast.error(err.message),
   });
 
   const deleteMutation = trpc.tasks.delete.useMutation({
@@ -1106,7 +1138,7 @@ export default function Tasks() {
             })}
           </div>
 
-          <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+          <DragOverlay dropAnimation={{ duration: 150, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
             {activeTask && <DragOverlayCard task={activeTask} allUsers={allUsers} />}
           </DragOverlay>
         </DndContext>

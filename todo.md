@@ -87,3 +87,9 @@
 
 ## Bug Fix v6 - Drag-and-Drop
 - [x] Corrigir drag-and-drop: arrastar card clicando em qualquer lugar do card (usar MouseSensor + TouchSensor em vez de PointerSensor, div nativo em vez de motion.div)
+
+## Bug Fix v7 - Fluidez do Drag-and-Drop
+- [x] Implementar atualização otimista no drag (mover card visualmente na hora, sem esperar servidor)
+- [x] Feedback visual claro na coluna de destino durante o drag
+- [x] Rollback automático se o servidor retornar erro
+- [x] Card não volta para coluna original ao soltar — move instantaneamente
