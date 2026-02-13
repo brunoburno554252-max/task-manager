@@ -1,11 +1,10 @@
-Task Detail Panel opened successfully:
-- Slide-in panel from right with backdrop blur
-- Shows task ID (#30001), priority badge (Alta), title (Test Task)
-- Pipeline steps visible: Pendente > Em Andamento (active, blue) > Concluída
-- Info grid: Responsável (Não atribuído), Criado por (Triệu Bích Thoa), Prazo (Sem prazo), Pontos (Pendente)
-- Description section visible
-- Tabs: Comentários | Atividades
-- Comment input with avatar, textarea, Ctrl+Enter hint, Enviar button
-- "Nenhum comentário ainda" placeholder
-- Edit/Delete/Close buttons in header
-- Overall: Panel works great, design is premium
+Kanban v5 Screenshot Notes:
+- Kanban board showing 3 columns: Pendente (2), Em Andamento (9), Concluída (0)
+- Cards show: ID, priority badge, title, description, assignee avatar, date
+- Priority accent bar on left side of each card (colored)
+- Column headers have gradient icons and task counts
+- View toggle (Kanban/Cards) and Filters button visible
+- Nova Tarefa button with glow effect
+- Empty state in Concluída column with icon and text
+- Cards are draggable (entire card, no grip handle)
+- Need to test: click on card opens detail panel, drag between columns

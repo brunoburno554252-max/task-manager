@@ -78,3 +78,9 @@
 - [x] API de comentários no backend (criar, listar)
 - [x] Opção de visualização alternativa por Cards (grid de cards)
 - [x] Cards se movem automaticamente ao mudar status
+
+## Refatoração v5 - UX do Kanban
+- [x] Drag-and-drop no card inteiro (remover grip handle do cantinho)
+- [x] Mais informações visíveis nos cards (responsável com avatar, prazo, descrição, pontos)
+- [x] Modal de Nova Tarefa maior e mais completo com mais opções
+- [x] Diferenciar clique (abre detalhes) de drag (arrasta card)
