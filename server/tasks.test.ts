@@ -196,6 +196,72 @@ describe("Task Management API", () => {
     });
   });
 
+  describe("tasks.comments", () => {
+    it("returns comments for a task", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const task = await caller.tasks.create({
+        title: "Comment Test Task",
+        priority: "medium",
+      });
+      const comments = await caller.tasks.comments({ taskId: task.id });
+      expect(Array.isArray(comments)).toBe(true);
+    });
+
+    it("allows adding a comment to a task", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const task = await caller.tasks.create({
+        title: "Comment Add Test",
+        priority: "low",
+      });
+      const result = await caller.tasks.addComment({
+        taskId: task.id,
+        content: "This is a test comment",
+      });
+      expect(result).toHaveProperty("id");
+      expect(typeof result.id).toBe("number");
+
+      // Verify comment was added
+      const comments = await caller.tasks.comments({ taskId: task.id });
+      expect(comments.length).toBeGreaterThan(0);
+      expect(comments[0].content).toBe("This is a test comment");
+    });
+
+    it("rejects empty comments", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      await expect(
+        caller.tasks.addComment({ taskId: 1, content: "" })
+      ).rejects.toThrow();
+    });
+
+    it("rejects unauthenticated users from commenting", async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      await expect(
+        caller.tasks.addComment({ taskId: 1, content: "test" })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("tasks.activities", () => {
+    it("returns activities for a task", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const task = await caller.tasks.create({
+        title: "Activity Test Task",
+        priority: "high",
+      });
+      const activities = await caller.tasks.activities({ taskId: task.id });
+      expect(Array.isArray(activities)).toBe(true);
+      // Should have at least the creation activity
+      expect(activities.length).toBeGreaterThan(0);
+    });
+
+    it("rejects unauthenticated users", async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      await expect(
+        caller.tasks.activities({ taskId: 1 })
+      ).rejects.toThrow();
+    });
+  });
+
   describe("users.list", () => {
     it("returns users list for authenticated users", async () => {
       const caller = appRouter.createCaller(createAdminContext());

@@ -1,11 +1,11 @@
-Kanban Premium Screenshot Review:
-- Three columns visible: Pendente (0), Em Andamento (4), Concluída (0)
-- Column headers have gradient icons (orange/blue/green) - looking great
-- Cards have left priority accent bar (orange for high, red for urgent)
-- Cards show: title, description, priority badge, assignee avatar with initials, task ID
-- Avatar gradient circles with initials visible (TB for Triệu)
-- "Não atribuído" shown with dashed circle for unassigned tasks
-- Empty columns show icons and text (Nenhuma tarefa pendente, Arraste tarefas aqui)
-- Header has Kanban Board title with target icon, task counter, Filtros button, Nova Tarefa button
-- Overall design is significantly more premium and elaborate than before
-- The cards are much more detailed with multiple visual indicators
+Task Detail Panel opened successfully:
+- Slide-in panel from right with backdrop blur
+- Shows task ID (#30001), priority badge (Alta), title (Test Task)
+- Pipeline steps visible: Pendente > Em Andamento (active, blue) > Concluída
+- Info grid: Responsável (Não atribuído), Criado por (Triệu Bích Thoa), Prazo (Sem prazo), Pontos (Pendente)
+- Description section visible
+- Tabs: Comentários | Atividades
+- Comment input with avatar, textarea, Ctrl+Enter hint, Enviar button
+- "Nenhum comentário ainda" placeholder
+- Edit/Delete/Close buttons in header
+- Overall: Panel works great, design is premium

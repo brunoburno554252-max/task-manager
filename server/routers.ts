@@ -8,7 +8,8 @@ import {
   getAllUsers, addPoints, getUserPoints, getRanking,
   getAllBadges, getUserBadges, checkAndAwardBadges, seedBadges,
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
-  getUserById,
+  getUserById, createComment, getCommentsByTaskId, deleteComment,
+  getTaskActivities,
 } from "./db";
 
 // Seed badges on startup
@@ -194,6 +195,46 @@ export const appRouter = router({
           details: `Excluiu a tarefa #${input.id}`,
         });
         return { success: true };
+      }),
+
+    comments: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ input }) => {
+        return getCommentsByTaskId(input.taskId);
+      }),
+
+    addComment: protectedProcedure
+      .input(z.object({
+        taskId: z.number(),
+        content: z.string().min(1).max(2000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await createComment({
+          taskId: input.taskId,
+          userId: ctx.user.id,
+          content: input.content,
+        });
+        await logActivity({
+          userId: ctx.user.id,
+          action: "commented",
+          entityType: "task",
+          entityId: input.taskId,
+          details: `Comentou na tarefa #${input.taskId}`,
+        });
+        return result;
+      }),
+
+    deleteComment: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteComment(input.id);
+        return { success: true };
+      }),
+
+    activities: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ input }) => {
+        return getTaskActivities(input.taskId);
       }),
   }),
 

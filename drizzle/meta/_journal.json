@@ -15,6 +15,13 @@
       "when": 1770929845239,
       "tag": "0001_black_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770944842119,
+      "tag": "0002_tan_gravity",
+      "breakpoints": true
     }
   ]
 }

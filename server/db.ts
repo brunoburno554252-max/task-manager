@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
-  Badge
+  Badge, taskComments,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -371,6 +371,53 @@ export async function getActivityLog(filters?: { userId?: number; limit?: number
     .where(where)
     .orderBy(desc(activityLog.createdAt))
     .limit(filters?.limit ?? 100);
+}
+
+// ============ COMMENTS ============
+
+export async function createComment(data: { taskId: number; userId: number; content: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(taskComments).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function getCommentsByTaskId(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: taskComments.id,
+    taskId: taskComments.taskId,
+    userId: taskComments.userId,
+    content: taskComments.content,
+    createdAt: taskComments.createdAt,
+    userName: users.name,
+  }).from(taskComments)
+    .leftJoin(users, eq(taskComments.userId, users.id))
+    .where(eq(taskComments.taskId, taskId))
+    .orderBy(desc(taskComments.createdAt));
+}
+
+export async function deleteComment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(taskComments).where(eq(taskComments.id, id));
+}
+
+export async function getTaskActivities(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: activityLog.id,
+    userId: activityLog.userId,
+    action: activityLog.action,
+    details: activityLog.details,
+    createdAt: activityLog.createdAt,
+    userName: users.name,
+  }).from(activityLog)
+    .leftJoin(users, eq(activityLog.userId, users.id))
+    .where(and(eq(activityLog.entityType, "task"), eq(activityLog.entityId, taskId)))
+    .orderBy(desc(activityLog.createdAt));
 }
 
 // ============ DASHBOARD STATS ============

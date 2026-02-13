@@ -66,3 +66,15 @@
 - [x] Layout geral do Kanban mais impactante e profissional
 - [x] Modal de criação de tarefa mais completo e bonito
 - [x] Filtros visuais no Kanban (por responsável, prioridade)
+
+## Refatoração v4 - Kanban Interativo (estilo Bitrix24)
+- [x] Corrigir drag-and-drop entre colunas (mover para qualquer coluna)
+- [x] Clicar no card abre painel de detalhes lateral/modal com todas as informações
+- [x] Painel de detalhes: título, descrição, responsável, prazo, criador, status
+- [x] Barra de etapas/pipeline visual no topo do painel de detalhes
+- [x] Sistema de comentários dentro do card (adicionar/listar comentários)
+- [x] Timeline de atividades dentro do card (mudanças de status, atribuições)
+- [x] Tabela de comentários no banco de dados
+- [x] API de comentários no backend (criar, listar)
+- [x] Opção de visualização alternativa por Cards (grid de cards)
+- [x] Cards se movem automaticamente ao mudar status
