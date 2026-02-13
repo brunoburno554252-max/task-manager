@@ -24,7 +24,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Columns3, Trophy, Award,
-  Activity, LogOut, PanelLeft, User, Zap,
+  Activity, LogOut, PanelLeft, User, Zap, MessageCircle,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -34,9 +34,10 @@ import { Badge } from "./ui/badge";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Columns3, label: "Kanban", path: "/tasks" },
+  { icon: Columns3, label: "Kanban", path: "/kanban" },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
+  { icon: MessageCircle, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Atividades", path: "/activity" },
 ];
 
@@ -130,7 +131,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find(item => location.startsWith(item.path) && item.path !== "/") || menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {

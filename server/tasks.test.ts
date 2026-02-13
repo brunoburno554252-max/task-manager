@@ -274,4 +274,49 @@ describe("Task Management API", () => {
       await expect(caller.users.list()).rejects.toThrow();
     });
   });
+
+  describe("chat.messages", () => {
+    it("returns chat messages for authenticated users", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const result = await caller.chat.messages({ limit: 50 });
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it("rejects unauthenticated users", async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      await expect(caller.chat.messages({ limit: 50 })).rejects.toThrow();
+    });
+  });
+
+  describe("chat.send", () => {
+    it("allows authenticated user to send a message", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const result = await caller.chat.send({ content: "Hello team!" });
+      expect(result).toHaveProperty("id");
+      expect(typeof result.id).toBe("number");
+    });
+
+    it("rejects empty messages", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      await expect(caller.chat.send({ content: "" })).rejects.toThrow();
+    });
+
+    it("rejects unauthenticated users", async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      await expect(caller.chat.send({ content: "test" })).rejects.toThrow();
+    });
+  });
+
+  describe("collaborators.listWithStats", () => {
+    it("returns collaborators with task stats", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      const result = await caller.collaborators.listWithStats();
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it("rejects unauthenticated users", async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      await expect(caller.collaborators.listWithStats()).rejects.toThrow();
+    });
+  });
 });

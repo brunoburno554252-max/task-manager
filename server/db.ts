@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
-  Badge, taskComments,
+  Badge, taskComments, chatMessages,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -486,4 +486,54 @@ export async function getRecentCompletions(days: number = 30) {
       sql`${tasks.completedAt} >= ${since}`
     ))
     .orderBy(asc(tasks.completedAt));
+}
+
+// ============ COLLABORATOR STATS ============
+
+export async function getCollaboratorsWithStats() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    role: users.role,
+    totalPoints: users.totalPoints,
+    createdAt: users.createdAt,
+    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
+    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id)`,
+  }).from(users).orderBy(desc(users.totalPoints));
+
+  return result;
+}
+
+// ============ CHAT ============
+
+export async function sendChatMessage(userId: number, content: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(chatMessages).values({ userId, content });
+  return { id: result[0].insertId };
+}
+
+export async function getChatMessages(limit: number = 100, beforeId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = beforeId ? [sql`${chatMessages.id} < ${beforeId}`] : [];
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select({
+    id: chatMessages.id,
+    userId: chatMessages.userId,
+    content: chatMessages.content,
+    createdAt: chatMessages.createdAt,
+    userName: users.name,
+    userRole: users.role,
+  }).from(chatMessages)
+    .leftJoin(users, eq(chatMessages.userId, users.id))
+    .where(where)
+    .orderBy(desc(chatMessages.createdAt))
+    .limit(limit);
 }

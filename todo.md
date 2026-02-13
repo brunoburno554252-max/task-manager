@@ -104,3 +104,27 @@
 - [x] Ao mover para outra coluna, posicionar card na posição exata (não só no final)
 - [x] Persistir ordem dos cards no banco de dados (campo sortOrder)
 - [x] Feedback visual de onde o card será inserido
+
+## Refatoração v10 - Visão por Colaborador + Chat Global
+
+### Visão por Colaborador no Kanban
+- [x] Tela inicial do Kanban: dashboard com cards de todos os colaboradores
+- [x] Card do colaborador: nome, tarefas concluídas, em andamento, pendentes
+- [x] Clicar no colaborador abre Kanban individual dele
+- [x] Kanban individual com abas (Pendentes, Em Andamento, Concluído) em linha
+- [x] Manter opção de visualização Kanban tradicional (colunas)
+- [x] Manter opção de visualização Cards
+- [x] Admin pode criar/editar/excluir tarefas no Kanban do colaborador
+- [x] Histórico de tarefas concluídas visível no Kanban individual
+
+### Chat Global
+- [x] Tabela de mensagens no banco de dados
+- [x] API de chat (enviar mensagem, listar mensagens)
+- [x] Página de Chat global (tipo grupo de WhatsApp)
+- [x] Mensagens em tempo real (polling ou similar)
+- [x] Identificação do remetente com avatar e nome
+- [x] Adicionar Chat ao menu lateral
+
+### Cadastro de Colaboradores
+- [x] Página de gerenciamento de colaboradores (admin)
+- [x] Adicionar ao menu lateral

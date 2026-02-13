@@ -9,7 +9,8 @@ import {
   getAllBadges, getUserBadges, checkAndAwardBadges, seedBadges,
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
   getUserById, createComment, getCommentsByTaskId, deleteComment,
-  getTaskActivities,
+  getTaskActivities, getCollaboratorsWithStats,
+  sendChatMessage, getChatMessages,
 } from "./db";
 
 // Seed badges on startup
@@ -299,6 +300,32 @@ export const appRouter = router({
       }).optional())
       .query(async ({ input }) => {
         return getActivityLog(input);
+      }),
+  }),
+
+  collaborators: router({
+    listWithStats: protectedProcedure.query(async () => {
+      return getCollaboratorsWithStats();
+    }),
+  }),
+
+  chat: router({
+    messages: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+        beforeId: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return getChatMessages(input?.limit ?? 100, input?.beforeId);
+      }),
+
+    send: protectedProcedure
+      .input(z.object({
+        content: z.string().min(1).max(5000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await sendChatMessage(ctx.user.id, input.content);
+        return result;
       }),
   }),
 });

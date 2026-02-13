@@ -29,6 +29,13 @@
       "when": 1770951782552,
       "tag": "0003_foamy_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1770952587983,
+      "tag": "0004_thick_skin",
+      "breakpoints": true
     }
   ]
 }
