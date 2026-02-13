@@ -1,10 +1,1 @@
-Kanban v5 Screenshot Notes:
-- Kanban board showing 3 columns: Pendente (2), Em Andamento (9), Concluída (0)
-- Cards show: ID, priority badge, title, description, assignee avatar, date
-- Priority accent bar on left side of each card (colored)
-- Column headers have gradient icons and task counts
-- View toggle (Kanban/Cards) and Filters button visible
-- Nova Tarefa button with glow effect
-- Empty state in Concluída column with icon and text
-- Cards are draggable (entire card, no grip handle)
-- Need to test: click on card opens detail panel, drag between columns
+Kanban v6 test results: Click on card works - detail panel opens with task info, pipeline buttons (Pendente/Em Andamento/Concluída), responsible info, due date, comments tab, activities tab. The click detection is working correctly now. Need to verify drag still works too. The MouseSensor with distance:10 should allow clicks under 10px movement and start drag after 10px.

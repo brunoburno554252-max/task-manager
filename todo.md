@@ -84,3 +84,6 @@
 - [x] Mais informações visíveis nos cards (responsável com avatar, prazo, descrição, pontos)
 - [x] Modal de Nova Tarefa maior e mais completo com mais opções
 - [x] Diferenciar clique (abre detalhes) de drag (arrasta card)
+
+## Bug Fix v6 - Drag-and-Drop
+- [x] Corrigir drag-and-drop: arrastar card clicando em qualquer lugar do card (usar MouseSensor + TouchSensor em vez de PointerSensor, div nativo em vez de motion.div)

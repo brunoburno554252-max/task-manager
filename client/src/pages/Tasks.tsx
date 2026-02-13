@@ -29,7 +29,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor,
+  DndContext, DragOverlay, closestCorners, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from "@dnd-kit/core";
@@ -173,7 +173,12 @@ function SortableTaskCard({
     isDragging,
   } = useSortable({ id: `task-${task.id}` });
 
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
   const pc = priorityConfig[task.priority];
   const PIcon = pc.icon;
   const dueInfo = getDueDateInfo(task.dueDate, task.status);
@@ -181,40 +186,20 @@ function SortableTaskCard({
   const assignee = allUsers?.find(u => u.id === task.assigneeId);
   const isCompleted = task.status === "completed";
 
-  // Track if we're dragging to differentiate click vs drag
-  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
-  const wasDragged = useRef(false);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    wasDragged.current = false;
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (dragStartPos.current) {
-      const dx = Math.abs(e.clientX - dragStartPos.current.x);
-      const dy = Math.abs(e.clientY - dragStartPos.current.y);
-      if (dx < 5 && dy < 5 && !wasDragged.current) {
-        onClick();
-      }
-    }
-    dragStartPos.current = null;
-  };
-
   return (
-    <motion.div
+    <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: isDragging ? 0.35 : 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.15 }}
-      className={`kanban-card-premium group relative touch-none select-none ${isDragging ? "kanban-card-dragging" : "cursor-pointer"} ${dueInfo.urgency === "overdue" ? "kanban-card-overdue" : ""}`}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
+      onClick={(e) => {
+        // Only trigger click if not dragging (dnd-kit handles this via activation distance)
+        if (!isDragging) {
+          e.stopPropagation();
+          onClick();
+        }
+      }}
+      className={`kanban-card-premium group relative ${isDragging ? "kanban-card-dragging" : ""} ${dueInfo.urgency === "overdue" ? "kanban-card-overdue" : ""}`}
     >
       {/* Priority accent bar */}
       <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-xl bg-gradient-to-b ${pc.accent}`} />
@@ -249,17 +234,12 @@ function SortableTaskCard({
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/15">
           <div className="flex items-center gap-2">
             {assignee ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`h-6 w-6 rounded-full bg-gradient-to-br ${getAvatarColor(assignee.id)} flex items-center justify-center shadow-sm ring-1 ring-white/10`}>
-                      <span className="text-[8px] font-bold text-white">{getInitials(assignee.name)}</span>
-                    </div>
-                    <span className="text-[11px] text-muted-foreground/70 font-medium max-w-[100px] truncate">{assignee.name?.split(" ")[0]}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">{assignee.name ?? "Sem nome"}</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-1.5">
+                <div className={`h-6 w-6 rounded-full bg-gradient-to-br ${getAvatarColor(assignee.id)} flex items-center justify-center shadow-sm ring-1 ring-white/10`}>
+                  <span className="text-[8px] font-bold text-white">{getInitials(assignee.name)}</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground/70 font-medium max-w-[100px] truncate">{assignee.name?.split(" ")[0]}</span>
+              </div>
             ) : (
               <div className="flex items-center gap-1.5 text-muted-foreground/35">
                 <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/25 flex items-center justify-center">
@@ -284,7 +264,7 @@ function SortableTaskCard({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -827,7 +807,8 @@ export default function Tasks() {
   const { data: allUsers } = trpc.users.list.useQuery();
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
     useSensor(KeyboardSensor)
   );
 
