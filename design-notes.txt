@@ -1,6 +1,7 @@
-Kanban v8 - Cross-container DnD:
-- 3 colunas: Pendente (13), Em Andamento (6), Concluída (7)
-- Implementado localStatusOverrides e localOrderOverrides para cross-container sorting
-- Cards devem se mover visualmente entre colunas durante o drag
-- Atualização otimista no handleDragEnd
-- onDragCancel para resetar overrides
+Kanban v9 - Cross-container + Same-column reordering
+- 3 colunas: Pendente (16), Em Andamento (6), Concluída (10)
+- Cards com prioridade, título, descrição, responsável, data
+- Sem erros TypeScript, servidor rodando
+- Backend tem campo sortOrder e rota reorder para persistir a ordem
+- handleDragOver agora trata tanto cross-container quanto same-column reordering
+- handleDragEnd persiste a ordem via reorderMutation

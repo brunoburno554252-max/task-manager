@@ -163,7 +163,7 @@ export async function listTasks(filters?: {
   const [taskList, countResult] = await Promise.all([
     db.select().from(tasks)
       .where(where)
-      .orderBy(desc(tasks.createdAt))
+      .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
       .limit(filters?.limit ?? 50)
       .offset(filters?.offset ?? 0),
     db.select({ count: sql<number>`count(*)` }).from(tasks).where(where),
@@ -191,6 +191,16 @@ export async function deleteTask(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(tasks).where(eq(tasks.id, id));
+}
+
+export async function reorderTasks(orderedIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Update sortOrder for each task based on its position in the array
+  const updates = orderedIds.map((id, index) =>
+    db.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id))
+  );
+  await Promise.all(updates);
 }
 
 // ============ POINTS ============

@@ -98,3 +98,9 @@
 - [x] Cards devem se mover e abrir espaço ao arrastar para outra coluna (sortable cross-container)
 - [x] Permitir posicionar card em qualquer posição da coluna de destino (não só no final)
 - [x] Feedback visual de onde o card vai ser inserido na coluna de destino
+
+## Bug Fix v9 - Reordenação completa do Kanban
+- [x] Reordenar cards dentro da mesma coluna (trocar posição entre 1o e 2o, etc.)
+- [x] Ao mover para outra coluna, posicionar card na posição exata (não só no final)
+- [x] Persistir ordem dos cards no banco de dados (campo sortOrder)
+- [x] Feedback visual de onde o card será inserido

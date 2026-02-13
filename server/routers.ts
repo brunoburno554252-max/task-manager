@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure, adminProcedure } from "./_core/trpc";
 import { z } from "zod";
 import {
-  createTask, getTaskById, listTasks, updateTask, deleteTask,
+  createTask, getTaskById, listTasks, updateTask, deleteTask, reorderTasks,
   getAllUsers, addPoints, getUserPoints, getRanking,
   getAllBadges, getUserBadges, checkAndAwardBadges, seedBadges,
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
@@ -235,6 +235,15 @@ export const appRouter = router({
       .input(z.object({ taskId: z.number() }))
       .query(async ({ input }) => {
         return getTaskActivities(input.taskId);
+      }),
+
+    reorder: protectedProcedure
+      .input(z.object({
+        orderedIds: z.array(z.number()),
+      }))
+      .mutation(async ({ input }) => {
+        await reorderTasks(input.orderedIds);
+        return { success: true };
       }),
   }),
 

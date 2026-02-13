@@ -27,6 +27,7 @@ export const tasks = mysqlTable("tasks", {
   dueDate: bigint("dueDate", { mode: "number" }),
   completedAt: bigint("completedAt", { mode: "number" }),
   pointsAwarded: int("pointsAwarded").default(0).notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

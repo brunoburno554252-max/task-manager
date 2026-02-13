@@ -964,12 +964,18 @@ export default function Tasks() {
 
   const openCreate = () => { setEditingTask(null); setForm(emptyForm); setDialogOpen(true); };
 
-  // Helper: find which column a task or droppable ID belongs to
+  const reorderMutation = trpc.tasks.reorder.useMutation({
+    onError: (err) => {
+      toast.error("Erro ao reordenar: " + err.message);
+      utils.tasks.list.invalidate();
+    },
+  });
+
+  // Helper: find which column a task/droppable ID belongs to (considering local overrides)
   const findContainer = useCallback((id: string): TaskStatus | null => {
     if (["pending", "in_progress", "completed"].includes(id)) return id as TaskStatus;
     if (id.startsWith("task-")) {
       const tId = parseInt(id.replace("task-", ""));
-      // Check local overrides first
       if (localStatusOverrides[tId]) return localStatusOverrides[tId];
       const t = data?.tasks.find(x => x.id === tId);
       return t ? t.status : null;
@@ -987,38 +993,67 @@ export default function Tasks() {
     if (!over) { setOverId(null); return; }
     setOverId(over.id as string);
 
-    const activeContainer = findContainer(active.id as string);
-    const overContainer = findContainer(over.id as string);
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    const activeContainer = findContainer(activeId);
+    const overContainer = findContainer(overId);
 
-    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+    if (!activeContainer || !overContainer) return;
 
-    const activeTaskId = parseInt((active.id as string).replace("task-", ""));
+    const activeTaskId = parseInt(activeId.replace("task-", ""));
 
-    // Move the card to the new container visually
-    setLocalStatusOverrides(prev => ({ ...prev, [activeTaskId]: overContainer }));
+    if (activeContainer !== overContainer) {
+      // Moving to a different column
+      setLocalStatusOverrides(prev => ({ ...prev, [activeTaskId]: overContainer }));
 
-    // Calculate insertion index in the target column
-    const targetTasks = tasksByStatus[overContainer].filter(t => t.id !== activeTaskId);
-    let insertIndex = targetTasks.length; // default: end
+      // Calculate insertion position in target column
+      const targetTasks = tasksByStatus[overContainer].filter(t => t.id !== activeTaskId);
+      let insertIndex = targetTasks.length;
 
-    if ((over.id as string).startsWith("task-")) {
-      const overTaskId = parseInt((over.id as string).replace("task-", ""));
-      const overIndex = targetTasks.findIndex(t => t.id === overTaskId);
-      if (overIndex >= 0) insertIndex = overIndex;
+      if (overId.startsWith("task-")) {
+        const overTaskId = parseInt(overId.replace("task-", ""));
+        const overIndex = targetTasks.findIndex(t => t.id === overTaskId);
+        if (overIndex >= 0) {
+          // Insert above the hovered card
+          insertIndex = overIndex;
+        }
+      }
+
+      const newOrder = targetTasks.map(t => t.id);
+      newOrder.splice(insertIndex, 0, activeTaskId);
+      setLocalOrderOverrides(prev => ({
+        ...prev,
+        [overContainer]: newOrder,
+        // Also clean up the source column
+        [activeContainer]: tasksByStatus[activeContainer].filter(t => t.id !== activeTaskId).map(t => t.id),
+      }));
+    } else {
+      // Reordering within the same column
+      if (overId.startsWith("task-")) {
+        const overTaskId = parseInt(overId.replace("task-", ""));
+        if (activeTaskId === overTaskId) return;
+
+        const currentOrder = (localOrderOverrides[activeContainer] ?? tasksByStatus[activeContainer].map(t => t.id));
+        const activeIndex = currentOrder.indexOf(activeTaskId);
+        const overIndex = currentOrder.indexOf(overTaskId);
+
+        if (activeIndex === -1 || overIndex === -1) return;
+
+        // Swap positions: remove active, insert at over position
+        const newOrder = [...currentOrder];
+        newOrder.splice(activeIndex, 1);
+        newOrder.splice(overIndex, 0, activeTaskId);
+        setLocalOrderOverrides(prev => ({ ...prev, [activeContainer]: newOrder }));
+      }
     }
-
-    const newOrder = [...targetTasks.map(t => t.id)];
-    newOrder.splice(insertIndex, 0, activeTaskId);
-    setLocalOrderOverrides(prev => ({ ...prev, [overContainer]: newOrder }));
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveId(null);
-    setOverId(null);
 
     if (!over) {
-      // Cancelled — reset overrides
+      setActiveId(null);
+      setOverId(null);
       setLocalStatusOverrides({});
       setLocalOrderOverrides({});
       return;
@@ -1027,20 +1062,40 @@ export default function Tasks() {
     const taskId = parseInt((active.id as string).replace("task-", ""));
     const task = data?.tasks.find(t => t.id === taskId);
     if (!task) {
+      setActiveId(null);
+      setOverId(null);
       setLocalStatusOverrides({});
       setLocalOrderOverrides({});
       return;
     }
 
-    const targetStatus = localStatusOverrides[taskId] ?? findContainer(over.id as string);
+    const targetStatus = localStatusOverrides[taskId] ?? findContainer(over.id as string) ?? task.status;
 
-    // Clear local overrides
-    setLocalStatusOverrides({});
-    setLocalOrderOverrides({});
+    // Collect the final order for all affected columns before clearing overrides
+    const affectedColumns: TaskStatus[] = [];
+    if (targetStatus !== task.status && targetStatus) affectedColumns.push(targetStatus);
+    if (!affectedColumns.includes(task.status)) affectedColumns.push(task.status);
 
+    // Persist order for each affected column
+    for (let i = 0; i < affectedColumns.length; i++) {
+      const col: TaskStatus = affectedColumns[i];
+      const colTasks: TaskItem[] = tasksByStatus[col] ?? [];
+      const finalOrder: number[] = localOrderOverrides[col] ?? colTasks.map((t: TaskItem) => t.id);
+      if (finalOrder.length > 0) {
+        reorderMutation.mutate({ orderedIds: finalOrder });
+      }
+    }
+
+    // Change status if needed
     if (targetStatus && targetStatus !== task.status) {
       statusMutation.mutate({ id: taskId, status: targetStatus });
     }
+
+    // Clear overrides
+    setActiveId(null);
+    setOverId(null);
+    setLocalStatusOverrides({});
+    setLocalOrderOverrides({});
   };
 
   const handleDragCancel = () => {
