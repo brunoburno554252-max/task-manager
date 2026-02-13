@@ -806,6 +806,10 @@ export default function Tasks() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+  // Local override for cross-container DnD: { [taskId]: newStatus }
+  const [localStatusOverrides, setLocalStatusOverrides] = useState<Record<number, TaskStatus>>({});
+  // Local order overrides for insertion position within a column
+  const [localOrderOverrides, setLocalOrderOverrides] = useState<Record<string, number[]>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
@@ -836,9 +840,29 @@ export default function Tasks() {
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
-    for (const task of filteredTasks) grouped[task.status]?.push(task);
+    for (const task of filteredTasks) {
+      const overriddenStatus = localStatusOverrides[task.id] ?? task.status;
+      grouped[overriddenStatus]?.push(task);
+    }
+    // Apply local order overrides
+    for (const status of statusOrder) {
+      const orderOverride = localOrderOverrides[status];
+      if (orderOverride) {
+        const taskMap = new Map(grouped[status].map(t => [t.id, t]));
+        const ordered: TaskItem[] = [];
+        for (const id of orderOverride) {
+          const t = taskMap.get(id);
+          if (t) ordered.push(t);
+        }
+        // Add any tasks not in the override (safety)
+        for (const t of grouped[status]) {
+          if (!orderOverride.includes(t.id)) ordered.push(t);
+        }
+        grouped[status] = ordered;
+      }
+    }
     return grouped;
-  }, [filteredTasks]);
+  }, [filteredTasks, localStatusOverrides, localOrderOverrides]);
 
   const hasActiveFilters = filterPriority !== "all" || filterAssignee !== "all" || searchQuery !== "";
 
@@ -940,40 +964,90 @@ export default function Tasks() {
 
   const openCreate = () => { setEditingTask(null); setForm(emptyForm); setDialogOpen(true); };
 
+  // Helper: find which column a task or droppable ID belongs to
+  const findContainer = useCallback((id: string): TaskStatus | null => {
+    if (["pending", "in_progress", "completed"].includes(id)) return id as TaskStatus;
+    if (id.startsWith("task-")) {
+      const tId = parseInt(id.replace("task-", ""));
+      // Check local overrides first
+      if (localStatusOverrides[tId]) return localStatusOverrides[tId];
+      const t = data?.tasks.find(x => x.id === tId);
+      return t ? t.status : null;
+    }
+    return null;
+  }, [data, localStatusOverrides]);
+
   // ===== DND Handlers =====
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
-    setOverId(over ? (over.id as string) : null);
+    const { active, over } = event;
+    if (!over) { setOverId(null); return; }
+    setOverId(over.id as string);
+
+    const activeContainer = findContainer(active.id as string);
+    const overContainer = findContainer(over.id as string);
+
+    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+
+    const activeTaskId = parseInt((active.id as string).replace("task-", ""));
+
+    // Move the card to the new container visually
+    setLocalStatusOverrides(prev => ({ ...prev, [activeTaskId]: overContainer }));
+
+    // Calculate insertion index in the target column
+    const targetTasks = tasksByStatus[overContainer].filter(t => t.id !== activeTaskId);
+    let insertIndex = targetTasks.length; // default: end
+
+    if ((over.id as string).startsWith("task-")) {
+      const overTaskId = parseInt((over.id as string).replace("task-", ""));
+      const overIndex = targetTasks.findIndex(t => t.id === overTaskId);
+      if (overIndex >= 0) insertIndex = overIndex;
+    }
+
+    const newOrder = [...targetTasks.map(t => t.id)];
+    newOrder.splice(insertIndex, 0, activeTaskId);
+    setLocalOrderOverrides(prev => ({ ...prev, [overContainer]: newOrder }));
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
     setActiveId(null);
     setOverId(null);
-    const { active, over } = event;
-    if (!over) return;
+
+    if (!over) {
+      // Cancelled — reset overrides
+      setLocalStatusOverrides({});
+      setLocalOrderOverrides({});
+      return;
+    }
 
     const taskId = parseInt((active.id as string).replace("task-", ""));
     const task = data?.tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    let targetStatus: TaskStatus | null = null;
-
-    const overId = over.id as string;
-    if (["pending", "in_progress", "completed"].includes(overId)) {
-      targetStatus = overId as TaskStatus;
-    } else if (overId.startsWith("task-")) {
-      const overTaskId = parseInt(overId.replace("task-", ""));
-      const overTask = data?.tasks.find(t => t.id === overTaskId);
-      if (overTask) targetStatus = overTask.status;
+    if (!task) {
+      setLocalStatusOverrides({});
+      setLocalOrderOverrides({});
+      return;
     }
+
+    const targetStatus = localStatusOverrides[taskId] ?? findContainer(over.id as string);
+
+    // Clear local overrides
+    setLocalStatusOverrides({});
+    setLocalOrderOverrides({});
 
     if (targetStatus && targetStatus !== task.status) {
       statusMutation.mutate({ id: taskId, status: targetStatus });
     }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setOverId(null);
+    setLocalStatusOverrides({});
+    setLocalOrderOverrides({});
   };
 
   const activeTask = activeId ? data?.tasks.find(t => t.id === parseInt(activeId.replace("task-", ""))) : null;
@@ -1093,7 +1167,7 @@ export default function Tasks() {
 
       {/* Content */}
       {viewMode === "kanban" ? (
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {statusOrder.map((status) => {
               const col = columnConfig[status];

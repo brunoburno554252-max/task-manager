@@ -1,1 +1,6 @@
-Kanban v6 test results: Click on card works - detail panel opens with task info, pipeline buttons (Pendente/Em Andamento/Concluída), responsible info, due date, comments tab, activities tab. The click detection is working correctly now. Need to verify drag still works too. The MouseSensor with distance:10 should allow clicks under 10px movement and start drag after 10px.
+Kanban v8 - Cross-container DnD:
+- 3 colunas: Pendente (13), Em Andamento (6), Concluída (7)
+- Implementado localStatusOverrides e localOrderOverrides para cross-container sorting
+- Cards devem se mover visualmente entre colunas durante o drag
+- Atualização otimista no handleDragEnd
+- onDragCancel para resetar overrides

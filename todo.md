@@ -93,3 +93,8 @@
 - [x] Feedback visual claro na coluna de destino durante o drag
 - [x] Rollback automático se o servidor retornar erro
 - [x] Card não volta para coluna original ao soltar — move instantaneamente
+
+## Bug Fix v8 - Reordenação entre colunas no Kanban
+- [x] Cards devem se mover e abrir espaço ao arrastar para outra coluna (sortable cross-container)
+- [x] Permitir posicionar card em qualquer posição da coluna de destino (não só no final)
+- [x] Feedback visual de onde o card vai ser inserido na coluna de destino
