@@ -44,9 +44,50 @@
   --font-display: 'Playfair Display', serif;
 }
 
-/* Premium dark theme */
+/* ============================================
+   LIGHT THEME - Elegant white with pink sidebar
+   ============================================ */
 :root {
   --radius: 0.75rem;
+  --background: oklch(0.985 0.002 270);
+  --foreground: oklch(0.2 0.02 270);
+  --card: oklch(0.995 0.001 270);
+  --card-foreground: oklch(0.2 0.02 270);
+  --popover: oklch(0.995 0.001 270);
+  --popover-foreground: oklch(0.2 0.02 270);
+  --primary: oklch(0.65 0.22 340);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.01 270);
+  --secondary-foreground: oklch(0.35 0.02 270);
+  --muted: oklch(0.94 0.008 270);
+  --muted-foreground: oklch(0.5 0.02 270);
+  --accent: oklch(0.95 0.03 340);
+  --accent-foreground: oklch(0.35 0.1 340);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.9 0.01 270);
+  --input: oklch(0.92 0.008 270);
+  --ring: oklch(0.65 0.22 340);
+  --chart-1: oklch(0.65 0.22 340);
+  --chart-2: oklch(0.6 0.18 250);
+  --chart-3: oklch(0.65 0.16 170);
+  --chart-4: oklch(0.6 0.2 310);
+  --chart-5: oklch(0.65 0.18 50);
+  /* Sidebar - Rose/Pink gradient */
+  --sidebar: oklch(0.55 0.2 340);
+  --sidebar-foreground: oklch(0.97 0.01 340);
+  --sidebar-primary: oklch(0.97 0.01 340);
+  --sidebar-primary-foreground: oklch(0.45 0.2 340);
+  --sidebar-accent: oklch(0.6 0.2 340);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(0.5 0.18 340);
+  --sidebar-ring: oklch(0.75 0.15 340);
+}
+
+/* ============================================
+   DARK THEME - Premium dark with purple accents
+   ============================================ */
+.dark {
   --background: oklch(0.13 0.015 270);
   --foreground: oklch(0.93 0.005 270);
   --card: oklch(0.17 0.018 270);
@@ -131,39 +172,62 @@
     }
   }
 
-  /* Premium glass card effect */
+  /* Glass card - adapts to theme */
   .glass-card {
     background: oklch(0.17 0.018 270 / 0.6);
     backdrop-filter: blur(20px);
     border: 1px solid oklch(0.3 0.02 270 / 0.3);
   }
+  :root:not(.dark) .glass-card,
+  :not(.dark) .glass-card {
+    background: oklch(0.99 0.002 270 / 0.7);
+    border: 1px solid oklch(0.85 0.01 270 / 0.5);
+    box-shadow: 0 4px 24px oklch(0 0 0 / 0.06);
+  }
 
-  /* Glow effect for primary elements */
+  /* Glow effect */
   .glow-primary {
     box-shadow: 0 0 20px oklch(0.72 0.19 280 / 0.15), 0 0 60px oklch(0.72 0.19 280 / 0.05);
   }
+  :root:not(.dark) .glow-primary,
+  :not(.dark) .glow-primary {
+    box-shadow: 0 0 20px oklch(0.65 0.22 340 / 0.15), 0 0 60px oklch(0.65 0.22 340 / 0.05);
+  }
 
-  /* Subtle gradient text */
+  /* Gradient text */
   .gradient-text {
     background: linear-gradient(135deg, oklch(0.72 0.19 280), oklch(0.75 0.18 200));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+  :root:not(.dark) .gradient-text,
+  :not(.dark) .gradient-text {
+    background: linear-gradient(135deg, oklch(0.55 0.22 340), oklch(0.5 0.2 310));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 
-  /* Kanban column premium styling */
+  /* Kanban column */
   .kanban-column-premium {
     background: linear-gradient(180deg, oklch(0.16 0.018 270 / 0.9), oklch(0.14 0.015 270 / 0.7));
     border: 1px solid oklch(0.28 0.02 270 / 0.4);
     border-radius: 1rem;
     backdrop-filter: blur(10px);
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
+  }
+  :root:not(.dark) .kanban-column-premium,
+  :not(.dark) .kanban-column-premium {
+    background: linear-gradient(180deg, oklch(0.98 0.003 270 / 0.95), oklch(0.96 0.005 270 / 0.9));
+    border: 1px solid oklch(0.88 0.01 270 / 0.6);
+    box-shadow: 0 2px 12px oklch(0 0 0 / 0.04);
   }
   .kanban-column-premium:hover {
     border-color: oklch(0.32 0.025 270 / 0.5);
   }
 
-  /* Kanban card premium */
+  /* Kanban card */
   .kanban-card-premium {
     background: linear-gradient(135deg, oklch(0.19 0.02 270), oklch(0.18 0.018 270));
     border: 1px solid oklch(0.28 0.02 270 / 0.4);
@@ -171,11 +235,21 @@
     transition: all 0.12s cubic-bezier(0.25, 1, 0.5, 1);
     overflow: hidden;
   }
+  :root:not(.dark) .kanban-card-premium,
+  :not(.dark) .kanban-card-premium {
+    background: oklch(0.995 0.001 270);
+    border: 1px solid oklch(0.88 0.01 270 / 0.6);
+    box-shadow: 0 1px 4px oklch(0 0 0 / 0.05);
+  }
   .kanban-card-premium:hover {
     border-color: oklch(0.72 0.19 280 / 0.35);
     box-shadow: 0 8px 32px oklch(0 0 0 / 0.3), 0 0 20px oklch(0.72 0.19 280 / 0.06);
     transform: translateY(-2px);
-    background: linear-gradient(135deg, oklch(0.20 0.022 270), oklch(0.19 0.02 270));
+  }
+  :root:not(.dark) .kanban-card-premium:hover,
+  :not(.dark) .kanban-card-premium:hover {
+    border-color: oklch(0.65 0.22 340 / 0.35);
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.08), 0 0 15px oklch(0.65 0.22 340 / 0.06);
   }
   .kanban-card-dragging {
     opacity: 0.2;
@@ -189,34 +263,35 @@
     border-color: oklch(0.72 0.19 280 / 0.5);
     transition: none;
   }
-  .kanban-card-overdue {
-    border-color: oklch(0.65 0.22 25 / 0.35);
-    box-shadow: 0 0 15px oklch(0.65 0.22 25 / 0.08);
+  :root:not(.dark) .kanban-card-overlay,
+  :not(.dark) .kanban-card-overlay {
+    box-shadow: 0 20px 60px oklch(0 0 0 / 0.15), 0 0 30px oklch(0.65 0.22 340 / 0.1);
+    border-color: oklch(0.65 0.22 340 / 0.5);
   }
-  .kanban-card-overdue:hover {
-    border-color: oklch(0.65 0.22 25 / 0.5);
-    box-shadow: 0 8px 32px oklch(0 0 0 / 0.3), 0 0 20px oklch(0.65 0.22 25 / 0.1);
+
+  /* Droppable column highlight */
+  .kanban-column-premium.drag-over {
+    border-color: oklch(0.72 0.19 280 / 0.6);
+    box-shadow: inset 0 0 40px oklch(0.72 0.19 280 / 0.08), 0 0 20px oklch(0.72 0.19 280 / 0.1);
+    background: linear-gradient(180deg, oklch(0.18 0.025 270 / 0.95), oklch(0.16 0.02 270 / 0.85));
+    transition: all 0.1s ease;
   }
-  .kanban-card-urgent {
-    border-left: none;
-  }
-  .kanban-card-urgent::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 0;
-    height: 0;
-    border-style: solid;
-    border-width: 0 20px 20px 0;
-    border-color: transparent oklch(0.65 0.22 25 / 0.3) transparent transparent;
-    border-radius: 0 0.875rem 0 0;
+  :root:not(.dark) .kanban-column-premium.drag-over,
+  :not(.dark) .kanban-column-premium.drag-over {
+    border-color: oklch(0.65 0.22 340 / 0.5);
+    box-shadow: inset 0 0 30px oklch(0.65 0.22 340 / 0.06), 0 0 15px oklch(0.65 0.22 340 / 0.08);
+    background: linear-gradient(180deg, oklch(0.97 0.01 340 / 0.95), oklch(0.95 0.015 340 / 0.9));
   }
 
   /* Task detail sheet */
   .task-detail-sheet {
     background: linear-gradient(180deg, oklch(0.15 0.018 270), oklch(0.13 0.015 270));
     border-left: 1px solid oklch(0.28 0.02 270 / 0.4);
+  }
+  :root:not(.dark) .task-detail-sheet,
+  :not(.dark) .task-detail-sheet {
+    background: oklch(0.995 0.001 270);
+    border-left: 1px solid oklch(0.9 0.01 270);
   }
 
   /* Pipeline steps */
@@ -230,27 +305,38 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .pipeline-step.active {
-    color: white;
-  }
+  .pipeline-step.active { color: white; }
   .pipeline-step.inactive {
     background: oklch(0.2 0.015 270);
     color: oklch(0.55 0.02 270);
     border: 1px solid oklch(0.28 0.02 270 / 0.3);
+  }
+  :root:not(.dark) .pipeline-step.inactive,
+  :not(.dark) .pipeline-step.inactive {
+    background: oklch(0.95 0.005 270);
+    color: oklch(0.5 0.02 270);
+    border: 1px solid oklch(0.88 0.01 270 / 0.5);
   }
   .pipeline-step.inactive:hover {
     background: oklch(0.22 0.018 270);
     border-color: oklch(0.35 0.025 270 / 0.5);
     color: oklch(0.7 0.02 270);
   }
+  :root:not(.dark) .pipeline-step.inactive:hover,
+  :not(.dark) .pipeline-step.inactive:hover {
+    background: oklch(0.92 0.008 270);
+    color: oklch(0.35 0.02 270);
+  }
   .pipeline-step.past {
     background: oklch(0.22 0.025 270);
     color: oklch(0.65 0.04 270);
     border: 1px solid oklch(0.32 0.03 270 / 0.4);
   }
-  .pipeline-step.past:hover {
-    background: oklch(0.24 0.03 270);
-    color: oklch(0.75 0.05 270);
+  :root:not(.dark) .pipeline-step.past,
+  :not(.dark) .pipeline-step.past {
+    background: oklch(0.93 0.01 340);
+    color: oklch(0.5 0.15 340);
+    border: 1px solid oklch(0.85 0.05 340 / 0.4);
   }
 
   /* Comment bubble */
@@ -260,8 +346,10 @@
     border-radius: 0 0.75rem 0.75rem 0.75rem;
     transition: all 0.2s ease;
   }
-  .comment-bubble:hover {
-    border-color: oklch(0.32 0.025 270 / 0.5);
+  :root:not(.dark) .comment-bubble,
+  :not(.dark) .comment-bubble {
+    background: oklch(0.96 0.005 270);
+    border: 1px solid oklch(0.9 0.01 270 / 0.5);
   }
 
   /* Activity timeline */
@@ -277,6 +365,10 @@
     bottom: -0.75rem;
     width: 1px;
     background: oklch(0.28 0.02 270 / 0.3);
+  }
+  :root:not(.dark) .activity-timeline-item::before,
+  :not(.dark) .activity-timeline-item::before {
+    background: oklch(0.88 0.01 270 / 0.5);
   }
   .activity-timeline-item:last-child::before {
     display: none;
@@ -295,27 +387,36 @@
     background: oklch(0.2 0.015 270);
     color: oklch(0.7 0.02 270);
   }
+  :root:not(.dark) .view-toggle-btn:hover,
+  :not(.dark) .view-toggle-btn:hover {
+    background: oklch(0.94 0.005 270);
+    color: oklch(0.3 0.02 270);
+  }
   .view-toggle-btn.active {
     background: oklch(0.72 0.19 280 / 0.15);
     color: oklch(0.82 0.15 280);
     border: 1px solid oklch(0.72 0.19 280 / 0.25);
   }
-
-  /* Droppable column highlight */
-  .kanban-column-premium.drag-over {
-    border-color: oklch(0.72 0.19 280 / 0.6);
-    box-shadow: inset 0 0 40px oklch(0.72 0.19 280 / 0.08), 0 0 20px oklch(0.72 0.19 280 / 0.1);
-    background: linear-gradient(180deg, oklch(0.18 0.025 270 / 0.95), oklch(0.16 0.02 270 / 0.85));
-    transition: all 0.1s ease;
+  :root:not(.dark) .view-toggle-btn.active,
+  :not(.dark) .view-toggle-btn.active {
+    background: oklch(0.65 0.22 340 / 0.12);
+    color: oklch(0.5 0.2 340);
+    border: 1px solid oklch(0.65 0.22 340 / 0.25);
   }
 
-  /* Stat card with subtle gradient border */
+  /* Stat card */
   .stat-card {
     position: relative;
     background: oklch(0.17 0.018 270);
     border: 1px solid oklch(0.28 0.02 270 / 0.5);
     border-radius: 1rem;
     overflow: hidden;
+  }
+  :root:not(.dark) .stat-card,
+  :not(.dark) .stat-card {
+    background: oklch(0.995 0.001 270);
+    border: 1px solid oklch(0.9 0.01 270 / 0.6);
+    box-shadow: 0 2px 12px oklch(0 0 0 / 0.04);
   }
   .stat-card::before {
     content: '';
@@ -325,5 +426,9 @@
     right: 0;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--stat-accent, oklch(0.72 0.19 280)), transparent);
+  }
+  :root:not(.dark) .stat-card::before,
+  :not(.dark) .stat-card::before {
+    background: linear-gradient(90deg, transparent, var(--stat-accent, oklch(0.65 0.22 340)), transparent);
   }
 }

@@ -15,21 +15,17 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Tooltip, TooltipContent, TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  ArrowLeft, Plus, Pencil, Trash2, Calendar, AlertTriangle,
+  ArrowLeft, Plus, Trash2, Calendar,
   Clock, CheckCircle2, Circle, Flame, Zap, ArrowUp, ArrowRight,
-  ArrowDown, Timer, Search, X, MessageSquare, History, Send,
-  Columns3, LayoutGrid, UserCircle, FileText, Tag, ChevronRight,
-  Eye, CalendarDays, Hash, MoreHorizontal, TrendingUp, Target,
+  ArrowDown, Search, X, MessageSquare, History, Send,
+  Columns3, LayoutGrid, ChevronRight,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  DndContext, DragOverlay, closestCorners, MouseSensor, TouchSensor,
+  DndContext, DragOverlay, closestCorners, MouseSensor, TouchSensor, KeyboardSensor,
   useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from "@dnd-kit/core";
@@ -59,10 +55,10 @@ type TaskItem = {
 };
 
 // ==================== CONSTANTS ====================
-const statusConfig: Record<TaskStatus, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  pending: { label: "Pendentes", icon: Circle, color: "text-orange-500", bg: "bg-orange-500/10" },
-  in_progress: { label: "Em Andamento", icon: Clock, color: "text-blue-500", bg: "bg-blue-500/10" },
-  completed: { label: "Concluídas", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+const statusConfig: Record<TaskStatus, { label: string; icon: React.ElementType; color: string; bg: string; gradient: string }> = {
+  pending: { label: "Pendentes", icon: Circle, color: "text-orange-500", bg: "bg-orange-500/10", gradient: "from-orange-500 to-amber-500" },
+  in_progress: { label: "Em Andamento", icon: Clock, color: "text-blue-500", bg: "bg-blue-500/10", gradient: "from-blue-500 to-cyan-500" },
+  completed: { label: "Concluídas", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10", gradient: "from-emerald-500 to-green-500" },
 };
 
 const priorityConfig: Record<Priority, { label: string; icon: React.ElementType; color: string; bg: string }> = {
@@ -74,17 +70,20 @@ const priorityConfig: Record<Priority, { label: string; icon: React.ElementType;
 
 const statusOrder: TaskStatus[] = ["pending", "in_progress", "completed"];
 
-// ==================== KANBAN CARD ====================
+// ==================== SORTABLE CARD ====================
 function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id.toString(),
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({
+    id: `task-${task.id}`,
     data: { type: "task", task },
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: transition || undefined,
-    opacity: isDragging ? 0.4 : 1,
+    transition: transition ?? undefined,
+    opacity: isDragging ? 0.3 : 1,
+    zIndex: isDragging ? 50 : undefined,
   };
 
   const pCfg = priorityConfig[task.priority];
@@ -92,16 +91,37 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
   const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
   const isDueSoon = task.dueDate && task.status !== "completed" && !isOverdue && (task.dueDate - Date.now()) < 86400000;
 
+  // Track drag distance to differentiate click vs drag
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+  const wasDragged = useRef(false);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      onClick={(e) => {
-        if (!(e.target as HTMLElement).closest("[data-no-click]")) onClick();
+      onPointerDown={(e) => {
+        dragStartPos.current = { x: e.clientX, y: e.clientY };
+        wasDragged.current = false;
+        listeners?.onPointerDown?.(e);
       }}
-      className="group kanban-card-premium rounded-xl bg-card/90 border border-border/30 p-4 cursor-pointer hover:border-primary/30 hover:shadow-md transition-all duration-150"
+      onPointerMove={(e) => {
+        if (dragStartPos.current) {
+          const dx = Math.abs(e.clientX - dragStartPos.current.x);
+          const dy = Math.abs(e.clientY - dragStartPos.current.y);
+          if (dx > 5 || dy > 5) wasDragged.current = true;
+        }
+        listeners?.onPointerMove?.(e);
+      }}
+      onPointerUp={(e) => {
+        if (!wasDragged.current) {
+          onClick();
+        }
+        dragStartPos.current = null;
+        listeners?.onPointerUp?.(e);
+      }}
+      className={`group kanban-card-premium rounded-xl bg-card/90 border border-border/30 p-4 cursor-pointer hover:border-primary/30 hover:shadow-md transition-all duration-100 ${isDragging ? "shadow-2xl ring-2 ring-primary/30" : ""}`}
     >
       {/* Priority + ID */}
       <div className="flex items-center justify-between mb-2">
@@ -155,51 +175,16 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
 }
 
 // ==================== DROPPABLE COLUMN ====================
-function DroppableColumn({
-  status,
-  tasks,
-  onCardClick,
-}: {
-  status: TaskStatus;
-  tasks: TaskItem[];
-  onCardClick: (task: TaskItem) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: `column-${status}` });
-  const cfg = statusConfig[status];
-  const Icon = cfg.icon;
-
+function DroppableColumn({ id, children, isOver }: { id: string; children: React.ReactNode; isOver?: boolean }) {
+  const { setNodeRef } = useDroppable({ id });
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col rounded-xl border transition-all duration-150 min-h-[300px] ${
-        isOver ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : "border-border/20 bg-card/30"
+      className={`space-y-2 flex-1 min-h-[200px] p-2 rounded-b-xl transition-all duration-100 ${
+        isOver ? "ring-2 ring-primary/40 bg-primary/5 scale-[1.005] shadow-lg shadow-primary/10" : ""
       }`}
     >
-      {/* Column Header */}
-      <div className="flex items-center gap-2 p-3 border-b border-border/20">
-        <div className={`h-7 w-7 rounded-lg ${cfg.bg} flex items-center justify-center`}>
-          <Icon className={`h-3.5 w-3.5 ${cfg.color}`} />
-        </div>
-        <span className="font-semibold text-sm">{cfg.label}</span>
-        <Badge variant="secondary" className="ml-auto text-xs h-5 px-2 bg-muted/50">
-          {tasks.length}
-        </Badge>
-      </div>
-
-      {/* Cards */}
-      <SortableContext items={tasks.map(t => t.id.toString())} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-300px)]">
-          {tasks.map(task => (
-            <SortableTaskCard key={task.id} task={task} onClick={() => onCardClick(task)} />
-          ))}
-          {tasks.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/40">
-              <Icon className="h-8 w-8 mb-2" />
-              <p className="text-xs">Nenhuma tarefa</p>
-            </div>
-          )}
-        </div>
-      </SortableContext>
+      {children}
     </div>
   );
 }
@@ -209,13 +194,15 @@ function DragOverlayCard({ task }: { task: TaskItem }) {
   const pCfg = priorityConfig[task.priority];
   const PIcon = pCfg.icon;
   return (
-    <div className="rounded-xl bg-card border border-primary/40 p-4 shadow-2xl shadow-primary/20 w-[280px] rotate-2">
+    <div className="rounded-xl bg-card border border-primary/40 p-4 shadow-2xl shadow-primary/20 w-[280px] rotate-1 opacity-95">
       <div className="flex items-center gap-2 mb-2">
         <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${pCfg.bg} ${pCfg.color}`}>
           <PIcon className="h-3 w-3" /> {pCfg.label}
         </div>
+        <span className="text-[10px] text-muted-foreground font-mono">#{task.id}</span>
       </div>
       <h4 className="font-medium text-sm">{task.title}</h4>
+      {task.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{task.description}</p>}
     </div>
   );
 }
@@ -233,7 +220,12 @@ export default function CollaboratorKanban() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  // DnD state
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [localStatusOverrides, setLocalStatusOverrides] = useState<Record<number, TaskStatus>>({});
+  const [localOrderOverrides, setLocalOrderOverrides] = useState<Record<string, number[]>>({});
 
   // Form state
   const [newTitle, setNewTitle] = useState("");
@@ -274,15 +266,17 @@ export default function CollaboratorKanban() {
   });
 
   const statusMutation = trpc.tasks.updateStatus.useMutation({
-    onMutate: async ({ id, status }) => {
+    onMutate: async ({ id, status: newStatus }) => {
       await utils.tasks.list.cancel();
       const prev = utils.tasks.list.getData({ assigneeId: userId });
-      if (prev) {
-        const prevTasks = Array.isArray(prev) ? prev : (prev as any).tasks ?? [];
-        const updated = prevTasks.map((t: any) => t.id === id ? { ...t, status } : t);
-        const newData = Array.isArray(prev) ? updated : { ...(prev as any), tasks: updated };
-        utils.tasks.list.setData({ assigneeId: userId }, newData as any);
-      }
+      utils.tasks.list.setData({ assigneeId: userId }, (old: any) => {
+        if (!old) return old;
+        const tasks = old.tasks ?? old;
+        const updated = (Array.isArray(tasks) ? tasks : []).map((t: any) =>
+          t.id === id ? { ...t, status: newStatus, completedAt: newStatus === "completed" ? Date.now() : null } : t
+        );
+        return Array.isArray(old) ? updated : { ...old, tasks: updated };
+      });
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
@@ -292,6 +286,7 @@ export default function CollaboratorKanban() {
     onSettled: () => {
       utils.tasks.list.invalidate();
       utils.collaborators.listWithStats.invalidate();
+      utils.gamification.ranking.invalidate();
     },
   });
 
@@ -315,13 +310,17 @@ export default function CollaboratorKanban() {
   });
 
   const reorderMutation = trpc.tasks.reorder.useMutation({
-    onError: () => toast.error("Erro ao reordenar"),
+    onError: () => {
+      toast.error("Erro ao reordenar");
+      utils.tasks.list.invalidate();
+    },
   });
 
-  // DnD
+  // DnD sensors
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } }),
+    useSensor(KeyboardSensor)
   );
 
   const tasks = useMemo(() => {
@@ -342,82 +341,164 @@ export default function CollaboratorKanban() {
     return result;
   }, [tasks, search, priorityFilter]);
 
+  // Task grouping WITH local DnD overrides
   const tasksByStatus = useMemo(() => {
+    const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
+    for (const task of filteredTasks) {
+      const overriddenStatus = localStatusOverrides[task.id] ?? task.status;
+      grouped[overriddenStatus]?.push(task);
+    }
+    // Apply local order overrides
+    for (const status of statusOrder) {
+      const orderOverride = localOrderOverrides[status];
+      if (orderOverride) {
+        const taskMap = new Map(grouped[status].map(t => [t.id, t]));
+        const ordered: TaskItem[] = [];
+        for (const id of orderOverride) {
+          const t = taskMap.get(id);
+          if (t) ordered.push(t);
+        }
+        for (const t of grouped[status]) {
+          if (!orderOverride.includes(t.id)) ordered.push(t);
+        }
+        grouped[status] = ordered;
+      } else {
+        grouped[status].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      }
+    }
+    return grouped;
+  }, [filteredTasks, localStatusOverrides, localOrderOverrides]);
+
+  // Raw task grouping (without DnD overrides) for tabs view
+  const rawTasksByStatus = useMemo(() => {
     const map: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
     filteredTasks.forEach(t => map[t.status]?.push(t));
     Object.values(map).forEach(arr => arr.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
     return map;
   }, [filteredTasks]);
 
-  // Local state for DnD
-  const [localOverrides, setLocalOverrides] = useState<Record<number, TaskStatus>>({});
+  const isAdmin = user?.role === "admin";
 
-  const displayTasksByStatus = useMemo(() => {
-    const map: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
-    filteredTasks.forEach(t => {
-      const status = localOverrides[t.id] || t.status;
-      map[status]?.push(t);
-    });
-    Object.values(map).forEach(arr => arr.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
-    return map;
-  }, [filteredTasks, localOverrides]);
-
+  // ===== DND Handlers =====
   const findContainer = useCallback((id: string): TaskStatus | null => {
-    if (id.startsWith("column-")) return id.replace("column-", "") as TaskStatus;
-    for (const status of statusOrder) {
-      if (displayTasksByStatus[status].some(t => t.id.toString() === id)) return status;
+    if (["pending", "in_progress", "completed"].includes(id)) return id as TaskStatus;
+    if (id.startsWith("task-")) {
+      const tId = parseInt(id.replace("task-", ""));
+      if (localStatusOverrides[tId]) return localStatusOverrides[tId];
+      const t = tasks.find(x => x.id === tId);
+      return t ? t.status : null;
     }
     return null;
-  }, [displayTasksByStatus]);
+  }, [tasks, localStatusOverrides]);
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id.toString());
-  }, []);
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
+  const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
-    if (!over) return;
-    const activeContainer = findContainer(active.id.toString());
-    const overContainer = findContainer(over.id.toString());
-    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
-    const taskId = parseInt(active.id.toString(), 10);
-    setLocalOverrides(prev => ({ ...prev, [taskId]: overContainer }));
-  }, [findContainer]);
+    if (!over) { setOverId(null); return; }
+    setOverId(over.id as string);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const aId = active.id as string;
+    const oId = over.id as string;
+    const activeContainer = findContainer(aId);
+    const overContainer = findContainer(oId);
+
+    if (!activeContainer || !overContainer) return;
+
+    const activeTaskId = parseInt(aId.replace("task-", ""));
+
+    if (activeContainer !== overContainer) {
+      // Moving to a different column
+      setLocalStatusOverrides(prev => ({ ...prev, [activeTaskId]: overContainer }));
+
+      // Calculate insertion position in target column
+      const targetTasks = tasksByStatus[overContainer].filter(t => t.id !== activeTaskId);
+      let insertIndex = targetTasks.length;
+
+      if (oId.startsWith("task-")) {
+        const overTaskId = parseInt(oId.replace("task-", ""));
+        const overIndex = targetTasks.findIndex(t => t.id === overTaskId);
+        if (overIndex >= 0) insertIndex = overIndex;
+      }
+
+      const newOrder = targetTasks.map(t => t.id);
+      newOrder.splice(insertIndex, 0, activeTaskId);
+      setLocalOrderOverrides(prev => ({
+        ...prev,
+        [overContainer]: newOrder,
+        [activeContainer]: tasksByStatus[activeContainer].filter(t => t.id !== activeTaskId).map(t => t.id),
+      }));
+    } else {
+      // Reordering within the same column
+      if (oId.startsWith("task-")) {
+        const overTaskId = parseInt(oId.replace("task-", ""));
+        if (activeTaskId === overTaskId) return;
+
+        const currentOrder = localOrderOverrides[activeContainer] ?? tasksByStatus[activeContainer].map(t => t.id);
+        const activeIndex = currentOrder.indexOf(activeTaskId);
+        const overIndex = currentOrder.indexOf(overTaskId);
+
+        if (activeIndex === -1 || overIndex === -1) return;
+
+        const newOrder = [...currentOrder];
+        newOrder.splice(activeIndex, 1);
+        newOrder.splice(overIndex, 0, activeTaskId);
+        setLocalOrderOverrides(prev => ({ ...prev, [activeContainer]: newOrder }));
+      }
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveId(null);
 
     if (!over) {
-      setLocalOverrides({});
+      setActiveId(null); setOverId(null);
+      setLocalStatusOverrides({}); setLocalOrderOverrides({});
       return;
     }
 
-    const taskId = parseInt(active.id.toString(), 10);
-    const targetContainer = findContainer(over.id.toString());
-
-    if (!targetContainer) {
-      setLocalOverrides({});
-      return;
-    }
-
+    const taskId = parseInt((active.id as string).replace("task-", ""));
     const task = tasks.find(t => t.id === taskId);
-    if (task && task.status !== targetContainer) {
-      statusMutation.mutate({ id: taskId, status: targetContainer });
+    if (!task) {
+      setActiveId(null); setOverId(null);
+      setLocalStatusOverrides({}); setLocalOrderOverrides({});
+      return;
     }
 
-    setLocalOverrides({});
-  }, [findContainer, tasks, statusMutation]);
+    const targetStatus = localStatusOverrides[taskId] ?? findContainer(over.id as string) ?? task.status;
 
-  const handleDragCancel = useCallback(() => {
-    setActiveId(null);
-    setLocalOverrides({});
-  }, []);
+    // Persist order for affected columns
+    const affectedColumns = new Set<TaskStatus>();
+    if (targetStatus !== task.status) affectedColumns.add(targetStatus);
+    affectedColumns.add(task.status);
 
-  const activeTask = activeId ? tasks.find(t => t.id.toString() === activeId) : null;
+    for (const col of Array.from(affectedColumns)) {
+      const colTasks = tasksByStatus[col] ?? [];
+      const finalOrder = localOrderOverrides[col] ?? colTasks.map(t => t.id);
+      if (finalOrder.length > 0) {
+        reorderMutation.mutate({ orderedIds: finalOrder });
+      }
+    }
 
+    // Change status if needed
+    if (targetStatus && targetStatus !== task.status) {
+      statusMutation.mutate({ id: taskId, status: targetStatus });
+    }
+
+    // Clear overrides
+    setActiveId(null); setOverId(null);
+    setLocalStatusOverrides({}); setLocalOrderOverrides({});
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null); setOverId(null);
+    setLocalStatusOverrides({}); setLocalOrderOverrides({});
+  };
+
+  const activeTask = activeId ? tasks.find(t => t.id === parseInt(activeId.replace("task-", ""))) : null;
   const initials = (collabUser?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-  const isAdmin = user?.role === "admin";
 
   // ==================== DETAIL PANEL ====================
   const renderDetailPanel = () => {
@@ -437,10 +518,7 @@ export default function CollaboratorKanban() {
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex"
         >
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedTask(null)} />
-
-          {/* Panel */}
           <motion.div
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -455,12 +533,9 @@ export default function CollaboratorKanban() {
                 <div className="flex items-center gap-2">
                   {isAdmin && (
                     <Button
-                      variant="ghost"
-                      size="sm"
+                      variant="ghost" size="sm"
                       className="h-8 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (confirm("Excluir esta tarefa?")) deleteMutation.mutate({ id: task.id });
-                      }}
+                      onClick={() => { if (confirm("Excluir esta tarefa?")) deleteMutation.mutate({ id: task.id }); }}
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
                     </Button>
@@ -530,7 +605,6 @@ export default function CollaboratorKanban() {
                   </div>
                 </div>
 
-                {/* Description */}
                 {task.description && (
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Descrição</h4>
@@ -545,8 +619,6 @@ export default function CollaboratorKanban() {
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <MessageSquare className="h-3.5 w-3.5" /> Comentários
                   </h4>
-
-                  {/* Comment Input */}
                   <div className="flex gap-2 mb-4">
                     <Textarea
                       ref={commentInputRef}
@@ -562,20 +634,13 @@ export default function CollaboratorKanban() {
                       }}
                     />
                     <Button
-                      size="icon"
-                      className="h-10 w-10 shrink-0"
+                      size="icon" className="h-10 w-10 shrink-0"
                       disabled={!commentText.trim() || addCommentMutation.isPending}
-                      onClick={() => {
-                        if (commentText.trim()) {
-                          addCommentMutation.mutate({ taskId: task.id, content: commentText.trim() });
-                        }
-                      }}
+                      onClick={() => { if (commentText.trim()) addCommentMutation.mutate({ taskId: task.id, content: commentText.trim() }); }}
                     >
                       <Send className="h-4 w-4" />
                     </Button>
                   </div>
-
-                  {/* Comments List */}
                   <div className="space-y-3">
                     {comments?.map((c: any) => (
                       <div key={c.id} className="rounded-lg bg-muted/10 p-3">
@@ -672,7 +737,7 @@ export default function CollaboratorKanban() {
           {statusOrder.map(s => {
             const cfg = statusConfig[s];
             const Icon = cfg.icon;
-            const count = tasksByStatus[s].length;
+            const count = rawTasksByStatus[s].length;
             return (
               <div key={s} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${cfg.bg}`}>
                 <Icon className={`h-3.5 w-3.5 ${cfg.color}`} />
@@ -687,12 +752,7 @@ export default function CollaboratorKanban() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar tarefa..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9 bg-card/80 border-border/30"
-          />
+          <Input placeholder="Buscar tarefa..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-card/80 border-border/30" />
         </div>
 
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
@@ -701,10 +761,14 @@ export default function CollaboratorKanban() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="low">Baixa</SelectItem>
-            <SelectItem value="medium">Média</SelectItem>
-            <SelectItem value="high">Alta</SelectItem>
-            <SelectItem value="urgent">Urgente</SelectItem>
+            {Object.entries(priorityConfig).map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <SelectItem key={key} value={key}>
+                  <div className="flex items-center gap-2"><Icon className={`h-3.5 w-3.5 ${cfg.color}`} /> {cfg.label}</div>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
 
@@ -738,12 +802,11 @@ export default function CollaboratorKanban() {
       {/* TABS VIEW */}
       {viewMode === "tabs" && (
         <div>
-          {/* Tab Buttons */}
           <div className="flex items-center gap-1 bg-card/50 border border-border/20 rounded-xl p-1.5 mb-4">
             {statusOrder.map(s => {
               const cfg = statusConfig[s];
               const Icon = cfg.icon;
-              const count = tasksByStatus[s].length;
+              const count = rawTasksByStatus[s].length;
               const isActive = activeTab === s;
               return (
                 <button
@@ -765,7 +828,6 @@ export default function CollaboratorKanban() {
             })}
           </div>
 
-          {/* Tab Content */}
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -775,7 +837,7 @@ export default function CollaboratorKanban() {
               transition={{ duration: 0.15 }}
               className="space-y-3"
             >
-              {tasksByStatus[activeTab].length === 0 ? (
+              {rawTasksByStatus[activeTab].length === 0 ? (
                 <div className="text-center py-16">
                   <div className={`h-14 w-14 rounded-2xl ${statusConfig[activeTab].bg} flex items-center justify-center mx-auto mb-3`}>
                     {(() => { const I = statusConfig[activeTab].icon; return <I className={`h-7 w-7 ${statusConfig[activeTab].color}`} />; })()}
@@ -783,7 +845,7 @@ export default function CollaboratorKanban() {
                   <p className="text-muted-foreground">Nenhuma tarefa {statusConfig[activeTab].label.toLowerCase()}</p>
                 </div>
               ) : (
-                tasksByStatus[activeTab].map(task => {
+                rawTasksByStatus[activeTab].map(task => {
                   const pCfg = priorityConfig[task.priority];
                   const PIcon = pCfg.icon;
                   const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
@@ -794,12 +856,9 @@ export default function CollaboratorKanban() {
                       onClick={() => setSelectedTask(task)}
                       className="group rounded-xl bg-card/80 border border-border/30 p-4 cursor-pointer hover:border-primary/30 hover:shadow-md transition-all duration-150 flex items-center gap-4"
                     >
-                      {/* Priority indicator */}
                       <div className={`h-10 w-10 rounded-lg ${pCfg.bg} flex items-center justify-center shrink-0`}>
                         <PIcon className={`h-5 w-5 ${pCfg.color}`} />
                       </div>
-
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-[10px] text-muted-foreground font-mono">#{task.id}</span>
@@ -812,8 +871,6 @@ export default function CollaboratorKanban() {
                           <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
                         )}
                       </div>
-
-                      {/* Meta */}
                       <div className="hidden sm:flex items-center gap-3 shrink-0">
                         {task.dueDate && (
                           <span className={`flex items-center gap-1 text-xs ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
@@ -827,7 +884,6 @@ export default function CollaboratorKanban() {
                           </span>
                         )}
                       </div>
-
                       <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                     </div>
                   );
@@ -849,16 +905,47 @@ export default function CollaboratorKanban() {
           onDragCancel={handleDragCancel}
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {statusOrder.map(status => (
-              <DroppableColumn
-                key={status}
-                status={status}
-                tasks={displayTasksByStatus[status]}
-                onCardClick={setSelectedTask}
-              />
-            ))}
+            {statusOrder.map(status => {
+              const col = statusConfig[status];
+              const colTasks = tasksByStatus[status];
+              const Icon = col.icon;
+              const isColumnOver = overId === status;
+
+              return (
+                <div key={status} className={`kanban-column-premium flex flex-col rounded-xl border transition-all duration-100 min-h-[300px] ${
+                  isColumnOver ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : "border-border/20 bg-card/30"
+                }`}>
+                  {/* Column Header */}
+                  <div className="flex items-center gap-2 p-3 border-b border-border/20">
+                    <div className={`h-7 w-7 rounded-lg bg-gradient-to-br ${col.gradient} flex items-center justify-center`}>
+                      <Icon className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <span className="font-semibold text-sm">{col.label}</span>
+                    <Badge variant="secondary" className="ml-auto text-xs h-5 px-2 bg-muted/50">
+                      {colTasks.length}
+                    </Badge>
+                  </div>
+
+                  <SortableContext items={colTasks.map(t => `task-${t.id}`)} strategy={verticalListSortingStrategy}>
+                    <DroppableColumn id={status} isOver={isColumnOver}>
+                      {colTasks.map(task => (
+                        <SortableTaskCard key={task.id} task={task} onClick={() => setSelectedTask(task)} />
+                      ))}
+                      {colTasks.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-36 text-muted-foreground/25 border border-dashed border-border/20 rounded-xl gap-2">
+                          <Icon className="h-9 w-9" />
+                          <span className="text-xs font-medium">Nenhuma tarefa</span>
+                          <span className="text-[10px]">Arraste tarefas aqui</span>
+                        </div>
+                      )}
+                    </DroppableColumn>
+                  </SortableContext>
+                </div>
+              );
+            })}
           </div>
-          <DragOverlay>
+
+          <DragOverlay dropAnimation={{ duration: 120, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
             {activeTask ? <DragOverlayCard task={activeTask} /> : null}
           </DragOverlay>
         </DndContext>

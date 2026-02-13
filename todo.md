@@ -128,3 +128,25 @@
 ### Cadastro de Colaboradores
 - [x] Página de gerenciamento de colaboradores (admin)
 - [x] Adicionar ao menu lateral
+
+## Refatoração v11 - Tema Claro + Permissões + DnD Fix
+
+### Tema Claro Elegante
+- [x] Criar tema light com fundo branco elegante
+- [x] Sidebar em rosa no tema light
+- [x] Cards em azul claro no tema light
+- [x] Toggle dark/light acessível na interface
+- [x] Manter tema dark existente funcionando
+
+### Permissões e Cadastro
+- [x] Apenas admin pode criar tarefas
+- [x] Apenas admin pode editar tarefas
+- [x] Colaboradores só visualizam e movem suas tarefas
+- [x] Sistema de criação de conta para colaboradores (admin cadastra)
+- [x] Botão de edição de tarefa visível apenas para admin
+
+### Corrigir Drag-and-Drop (definitivo)
+- [x] Reordenação dentro da mesma coluna funcional (trocar posição)
+- [x] Movimentação entre colunas com posição correta
+- [x] Atualização visual instantânea (sem precisar recarregar página)
+- [x] Persistência da ordem no banco de dados

@@ -24,9 +24,10 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Columns3, Trophy, Award,
-  Activity, LogOut, PanelLeft, User, Zap, MessageCircle,
+  Activity, LogOut, PanelLeft, User, Zap, MessageCircle, Sun, Moon,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
@@ -128,6 +129,7 @@ function DashboardLayoutContent({
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
+  const { theme, toggleTheme } = useTheme();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -220,6 +222,25 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="p-3">
+            {/* Theme Toggle */}
+            {toggleTheme && (
+              <div className="px-2 mb-2">
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 hover:bg-sidebar-accent transition-all text-sidebar-foreground/70 hover:text-sidebar-foreground group-data-[collapsible=icon]:justify-center"
+                  aria-label="Alternar tema"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <Moon className="h-4 w-4 shrink-0" />
+                  )}
+                  <span className="text-sm font-medium group-data-[collapsible=icon]:hidden">
+                    {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+                  </span>
+                </button>
+              </div>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-sidebar-accent transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
