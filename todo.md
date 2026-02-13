@@ -54,3 +54,15 @@
 - [x] Melhorar Conquistas com visual mais atraente
 - [x] Melhorar sidebar e layout geral
 - [x] Ajustar navegação (remover Relatórios do menu)
+
+## Refatoração v3 - Kanban Premium
+- [x] Cards do Kanban mais elaborados com mais informações visíveis
+- [x] Indicadores visuais de prazo (atrasado, próximo do vencimento, no prazo)
+- [x] Avatares dos responsáveis nos cards
+- [x] Cores por prioridade mais marcantes e diferenciadas
+- [x] Animações e transições suaves no drag-and-drop
+- [x] Header das colunas mais rico com contadores e ícones
+- [x] Barra de progresso ou indicador visual em cada card
+- [x] Layout geral do Kanban mais impactante e profissional
+- [x] Modal de criação de tarefa mais completo e bonito
+- [x] Filtros visuais no Kanban (por responsável, prioridade)
