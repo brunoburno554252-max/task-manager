@@ -208,7 +208,7 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal ${isActive ? "bg-primary/15 text-primary font-medium" : "hover:bg-sidebar-accent"}`}
+                      className={`h-10 transition-all font-normal ${isActive ? "bg-primary/10 text-primary font-medium shadow-sm shadow-primary/5" : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`}
