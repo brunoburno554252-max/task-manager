@@ -13,6 +13,7 @@ import Badges from "./pages/Badges";
 import ActivityPage from "./pages/ActivityPage";
 import Profile from "./pages/Profile";
 import Chat from "./pages/Chat";
+import AdminSettings from "./pages/AdminSettings";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
         <Route path={"/activity"} component={ActivityPage} />
         <Route path={"/chat"} component={Chat} />
         <Route path={"/profile"} component={Profile} />
+        <Route path={"/settings"} component={AdminSettings} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>

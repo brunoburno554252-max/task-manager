@@ -24,7 +24,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Columns3, Trophy, Award,
-  Activity, LogOut, PanelLeft, User, Zap, MessageCircle, Sun, Moon,
+  Activity, LogOut, PanelLeft, User, Zap, MessageCircle, Sun, Moon, Settings,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -40,6 +40,7 @@ const menuItems = [
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Atividades", path: "/activity" },
+  { icon: Settings, label: "Configurações", path: "/settings", adminOnly: true },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -200,7 +201,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1 space-y-0.5">
-              {menuItems.map(item => {
+              {menuItems.filter(item => !(item as any).adminOnly || user?.role === "admin").map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
