@@ -149,6 +149,10 @@ function DashboardLayoutContent({
     return recentMessages.filter(m => new Date(m.createdAt).getTime() > lastSeen && m.userId !== user.id).length;
   }, [recentMessages, user]);
 
+  // Overdue tasks badge
+  const { data: dashStats } = trpc.dashboard.stats.useQuery(undefined, { refetchInterval: 30000 });
+  const overdueCount = dashStats?.overdue ?? 0;
+
   // Mark as read when visiting chat
   useEffect(() => {
     if (location === "/chat") {
@@ -237,6 +241,11 @@ function DashboardLayoutContent({
                       {item.path === "/chat" && unreadCount > 0 && (
                         <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground animate-pulse">
                           {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
+                      {item.path === "/kanban" && overdueCount > 0 && (
+                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                          {overdueCount > 9 ? "9+" : overdueCount}
                         </span>
                       )}
                     </SidebarMenuButton>
