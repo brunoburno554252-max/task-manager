@@ -33,6 +33,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { fireConfetti } from "@/lib/confetti";
 
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "completed";
@@ -275,6 +276,7 @@ export default function CollaboratorKanban() {
         const upd = (Array.isArray(t) ? t : []).map((x: any) => x.id === id ? { ...x, status: newStatus, completedAt: newStatus === "completed" ? Date.now() : null } : x);
         return Array.isArray(old) ? upd : { ...old, tasks: upd };
       });
+      if (newStatus === "completed") fireConfetti();
       return { prev };
     },
     onError: (_e, _v, ctx) => { if (ctx?.prev) utils.tasks.list.setData({ assigneeId: userId }, ctx.prev as any); toast.error("Erro ao atualizar status"); },
