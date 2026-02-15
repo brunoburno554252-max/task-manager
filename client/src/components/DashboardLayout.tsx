@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -26,7 +27,7 @@ import {
   LayoutDashboard, Columns3, Trophy, Award,
   Activity, LogOut, PanelLeft, User, Zap, MessageCircle, Sun, Moon, Settings,
 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -137,6 +138,24 @@ function DashboardLayoutContent({
   const activeMenuItem = menuItems.find(item => location.startsWith(item.path) && item.path !== "/") || menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
 
+  // Unread chat messages badge
+  const { data: recentMessages } = trpc.chat.messages.useQuery(
+    { limit: 20 },
+    { refetchInterval: 10000 }
+  );
+  const unreadCount = useMemo(() => {
+    if (!recentMessages || !user) return 0;
+    const lastSeen = parseInt(localStorage.getItem("chat-last-seen") || "0");
+    return recentMessages.filter(m => new Date(m.createdAt).getTime() > lastSeen && m.userId !== user.id).length;
+  }, [recentMessages, user]);
+
+  // Mark as read when visiting chat
+  useEffect(() => {
+    if (location === "/chat") {
+      localStorage.setItem("chat-last-seen", Date.now().toString());
+    }
+  }, [location]);
+
   useEffect(() => {
     if (isCollapsed) {
       setIsResizing(false);
@@ -215,6 +234,11 @@ function DashboardLayoutContent({
                         className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`}
                       />
                       <span>{item.label}</span>
+                      {item.path === "/chat" && unreadCount > 0 && (
+                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground animate-pulse">
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

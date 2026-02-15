@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Trophy, Zap, Target, Clock, TrendingUp, Crown,
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 const medals = ["🥇", "🥈", "🥉"];
 
@@ -50,8 +51,11 @@ export default function Ranking() {
               : 0;
 
             return (
-              <div
+              <motion.div
                 key={r.id}
+                initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ delay: isFirst ? 0.1 : actualIdx === 1 ? 0.25 : 0.4, duration: 0.5, type: "spring", stiffness: 200 }}
                 className={`stat-card p-5 text-center relative ${isFirst ? "md:-mt-4 md:mb-4" : ""} ${isMe ? "ring-1 ring-primary/40" : ""}`}
                 style={{
                   "--stat-accent": isFirst
@@ -92,7 +96,7 @@ export default function Ranking() {
                     <p className="text-[9px] text-muted-foreground">Taxa</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -109,8 +113,11 @@ export default function Ranking() {
                 : 0;
 
               return (
-                <div
+                <motion.div
                   key={r.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
                   className={`flex items-center gap-4 p-4 hover:bg-muted/20 transition-colors ${isMe ? "bg-primary/5" : ""}`}
                 >
                   <span className="text-sm font-bold text-muted-foreground w-8 text-center">
@@ -145,7 +152,7 @@ export default function Ranking() {
                     <Zap className="h-3.5 w-3.5 text-amber-400" />
                     <span className="text-sm font-bold">{r.totalPoints}</span>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
