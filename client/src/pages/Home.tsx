@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useMemo } from "react";
+import { useThemeColors } from "@/hooks/useThemeColors";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, Tooltip, CartesianGrid,
@@ -26,6 +27,7 @@ export default function Home() {
   const { data: ranking } = trpc.gamification.ranking.useQuery();
   const { data: recentCompletions } = trpc.dashboard.recentCompletions.useQuery({ days: 30 });
   const { data: activityData } = trpc.activity.list.useQuery({ limit: 8 });
+  const themeColors = useThemeColors();
 
   const pieData = useMemo(() => {
     if (!stats) return [];
@@ -185,26 +187,26 @@ export default function Home() {
               <AreaChart data={areaData}>
                 <defs>
                   <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="oklch(0.72 0.19 280)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="oklch(0.72 0.19 280)" stopOpacity={0} />
+                    <stop offset="5%" stopColor={themeColors.chart.areaGradientStart} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={themeColors.chart.areaGradientStart} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.26 0.018 270 / 0.5)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "oklch(0.6 0.015 270)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.6 0.015 270)" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={themeColors.chart.gridStroke} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: themeColors.chart.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: themeColors.chart.tickFill }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
-                    background: "oklch(0.19 0.02 270)",
-                    border: "1px solid oklch(0.28 0.02 270)",
+                    background: themeColors.tooltip.background,
+                    border: `1px solid ${themeColors.tooltip.border}`,
                     borderRadius: "0.5rem",
                     fontSize: "12px",
-                    color: "oklch(0.93 0.005 270)",
+                    color: themeColors.tooltip.color,
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="count"
-                  stroke="oklch(0.72 0.19 280)"
+                  stroke={themeColors.chart.areaGradientStart}
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorCount)"
