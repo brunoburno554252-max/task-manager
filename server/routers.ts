@@ -12,6 +12,7 @@ import {
   getTaskActivities, getCollaboratorsWithStats,
   sendChatMessage, getChatMessages, updateUser,
 } from "./db";
+import { notifyTaskCreated, notifyStatusChanged } from "./whatsapp";
 
 // Seed badges on startup
 seedBadges().catch(console.error);
@@ -100,6 +101,20 @@ export const appRouter = router({
           entityId: result.id,
           details: `Criou a tarefa "${input.title}"`,
         });
+        // WhatsApp notification (fire-and-forget)
+        if (input.assigneeId) {
+          getUserById(input.assigneeId).then(assignee => {
+            if (assignee?.phone) {
+              notifyTaskCreated(
+                assignee.phone,
+                assignee.name ?? "Colaborador",
+                input.title,
+                input.priority,
+                input.dueDate,
+              ).catch(console.error);
+            }
+          }).catch(console.error);
+        }
         return result;
       }),
 
@@ -209,6 +224,21 @@ export const appRouter = router({
           entityId: input.id,
           details: `Alterou status para "${statusLabels[input.status]}"`,
         });
+
+        // WhatsApp notification for status change (fire-and-forget)
+        if (task.assigneeId && task.assigneeId !== ctx.user.id) {
+          getUserById(task.assigneeId).then(assignee => {
+            if (assignee?.phone) {
+              notifyStatusChanged(
+                assignee.phone,
+                assignee.name ?? "Colaborador",
+                task.title,
+                input.status,
+                ctx.user.name ?? "Admin",
+              ).catch(console.error);
+            }
+          }).catch(console.error);
+        }
 
         return { success: true };
       }),
