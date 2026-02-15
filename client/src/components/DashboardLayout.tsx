@@ -335,14 +335,23 @@ function DashboardLayoutContent({
           <div className="flex border-b border-border/50 h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground font-medium">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
+              <div className="flex items-center gap-1.5 text-sm">
+                <button onClick={() => setLocation("/")} className="text-muted-foreground hover:text-foreground transition-colors">
+                  TaskFlow
+                </button>
+                <span className="text-muted-foreground/50">/</span>
+                <span className="font-medium text-foreground">
+                  {activeMenuItem?.label ?? "Menu"}
+                </span>
               </div>
             </div>
+            {/* Overdue indicator on mobile */}
+            {overdueCount > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-500/10 text-red-500 text-xs font-medium">
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                {overdueCount} atrasada{overdueCount > 1 ? "s" : ""}
+              </div>
+            )}
           </div>
         )}
         <main className="flex-1 p-4 md:p-6">{children}</main>
