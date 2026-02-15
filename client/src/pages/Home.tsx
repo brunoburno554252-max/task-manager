@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
-  XAxis, YAxis, Tooltip, CartesianGrid,
+  XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar,
 } from "recharts";
 
 const COLORS = {
@@ -27,6 +27,7 @@ export default function Home() {
   const { data: ranking } = trpc.gamification.ranking.useQuery();
   const { data: recentCompletions } = trpc.dashboard.recentCompletions.useQuery({ days: 30 });
   const { data: activityData } = trpc.activity.list.useQuery({ limit: 8 });
+  const { data: collaborators } = trpc.collaborators.listWithStats.useQuery();
   const themeColors = useThemeColors();
 
   const pieData = useMemo(() => {
@@ -51,6 +52,16 @@ export default function Home() {
   }, [recentCompletions]);
 
   const topRanking = useMemo(() => ranking?.slice(0, 5) ?? [], [ranking]);
+
+  const barData = useMemo(() => {
+    if (!collaborators) return [];
+    return collaborators.slice(0, 8).map(c => ({
+      name: (c.name ?? "?").split(" ")[0],
+      concluidas: c.completedTasks ?? 0,
+      pendentes: c.pendingTasks ?? 0,
+      andamento: c.inProgressTasks ?? 0,
+    }));
+  }, [collaborators]);
 
   if (statsLoading) {
     return (
@@ -221,6 +232,37 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Comparative Bar Chart */}
+      {barData.length > 1 && (
+        <div className="stat-card p-5" style={{ "--stat-accent": "oklch(0.65 0.18 240)" } as React.CSSProperties}>
+          <h3 className="text-sm font-semibold mb-4">Comparativo por Colaborador</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={barData} barCategoryGap="20%">
+              <CartesianGrid strokeDasharray="3 3" stroke={themeColors.chart.gridStroke} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: themeColors.chart.tickFill }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: themeColors.chart.tickFill }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  background: themeColors.tooltip.background,
+                  border: `1px solid ${themeColors.tooltip.border}`,
+                  borderRadius: "0.5rem",
+                  fontSize: "12px",
+                  color: themeColors.tooltip.color,
+                }}
+              />
+              <Bar dataKey="concluidas" name="Concluídas" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="andamento" name="Em Andamento" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pendentes" name="Pendentes" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="flex items-center justify-center gap-4 mt-3">
+            <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /><span className="text-[11px] text-muted-foreground">Concluídas</span></div>
+            <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-blue-500" /><span className="text-[11px] text-muted-foreground">Em Andamento</span></div>
+            <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-amber-500" /><span className="text-[11px] text-muted-foreground">Pendentes</span></div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
