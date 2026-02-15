@@ -2,11 +2,14 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Trophy, Award, Target, Zap, Calendar, TrendingUp, Star,
+  Trophy, Award, Target, Zap, Calendar, TrendingUp, Star, Phone, Pencil, Check, X,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -22,6 +25,31 @@ export default function Profile() {
     const idx = ranking.findIndex(r => r.id === user.id);
     return idx >= 0 ? idx + 1 : null;
   }, [ranking, user]);
+
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneValue, setPhoneValue] = useState(user?.phone ?? "");
+
+  const utils = trpc.useUtils();
+  const updateProfileMutation = trpc.users.updateProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Perfil atualizado!");
+      setEditingPhone(false);
+      utils.auth.me.invalidate();
+    },
+    onError: () => toast.error("Erro ao atualizar perfil"),
+  });
+
+  const handleSavePhone = () => {
+    updateProfileMutation.mutate({ phone: phoneValue || null });
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 13);
+    if (digits.length <= 2) return `+${digits}`;
+    if (digits.length <= 4) return `+${digits.slice(0, 2)} (${digits.slice(2)}`;
+    if (digits.length <= 9) return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4)}`;
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  };
 
   const isLoading = badgesLoading || pointsLoading || statsLoading;
 
@@ -61,10 +89,36 @@ export default function Profile() {
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">{user?.email}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              <Calendar className="inline h-3 w-3 mr-1" />
-              Membro desde {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("pt-BR") : "-"}
-            </p>
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                <Calendar className="inline h-3 w-3 mr-1" />
+                Membro desde {user?.createdAt ? new Date(user.createdAt).toLocaleDateString("pt-BR") : "-"}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Phone className="h-3 w-3 text-muted-foreground" />
+                {editingPhone ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={phoneValue}
+                      onChange={e => setPhoneValue(formatPhone(e.target.value))}
+                      placeholder="+55 (11) 99999-9999"
+                      className="h-7 w-44 text-xs"
+                    />
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleSavePhone} disabled={updateProfileMutation.isPending}>
+                      <Check className="h-3 w-3 text-emerald-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingPhone(false); setPhoneValue(user?.phone ?? ""); }}>
+                      <X className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditingPhone(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    {user?.phone || "Adicionar telefone"}
+                    <Pencil className="h-2.5 w-2.5 opacity-50" />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

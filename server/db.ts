@@ -96,6 +96,17 @@ export async function getUserById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function updateUser(id: number, data: Partial<{
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: "user" | "admin";
+}>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set(data).where(eq(users.id, id));
+}
+
 // ============ TASKS ============
 
 export async function createTask(data: {
@@ -498,6 +509,7 @@ export async function getCollaboratorsWithStats() {
     id: users.id,
     name: users.name,
     email: users.email,
+    phone: users.phone,
     role: users.role,
     totalPoints: users.totalPoints,
     createdAt: users.createdAt,

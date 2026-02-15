@@ -10,7 +10,7 @@ import {
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
   getUserById, createComment, getCommentsByTaskId, deleteComment,
   getTaskActivities, getCollaboratorsWithStats,
-  sendChatMessage, getChatMessages,
+  sendChatMessage, getChatMessages, updateUser,
 } from "./db";
 
 // Seed badges on startup
@@ -47,6 +47,35 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return getUserById(input.id);
+      }),
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        email: z.string().email().max(320).optional(),
+        phone: z.string().max(20).optional().nullable(),
+        role: z.enum(["user", "admin"]).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        await updateUser(id, data as any);
+        await logActivity({
+          userId: ctx.user.id,
+          action: "updated",
+          entityType: "user",
+          entityId: id,
+          details: `Atualizou dados do colaborador #${id}`,
+        });
+        return { success: true };
+      }),
+    updateProfile: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255).optional(),
+        phone: z.string().max(20).optional().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateUser(ctx.user.id, input as any);
+        return { success: true };
       }),
   }),
 

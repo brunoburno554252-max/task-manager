@@ -2,20 +2,72 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Users, Search, CheckCircle2, Clock, AlertCircle, ListTodo,
-  TrendingUp, Zap, ChevronRight, Crown,
+  TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
 
 export default function Collaborators() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
+  const [editUser, setEditUser] = useState<{ id: number; name: string; email: string; phone: string; role: string } | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "user" });
 
   const { data: collaborators, isLoading } = trpc.collaborators.listWithStats.useQuery();
+  const utils = trpc.useUtils();
+
+  const updateUserMutation = trpc.users.update.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador atualizado!");
+      setEditUser(null);
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+    },
+    onError: () => toast.error("Erro ao atualizar colaborador"),
+  });
+
+  const handleEdit = (collab: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditForm({
+      name: collab.name || "",
+      email: collab.email || "",
+      phone: collab.phone || "",
+      role: collab.role || "user",
+    });
+    setEditUser(collab);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editUser) return;
+    updateUserMutation.mutate({
+      id: editUser.id,
+      name: editForm.name || undefined,
+      email: editForm.email || undefined,
+      phone: editForm.phone || null,
+      role: editForm.role as "user" | "admin",
+    });
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 13);
+    if (digits.length <= 2) return `+${digits}`;
+    if (digits.length <= 4) return `+${digits.slice(0, 2)} (${digits.slice(2)}`;
+    if (digits.length <= 9) return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4)}`;
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  };
 
   const filtered = useMemo(() => {
     if (!collaborators) return [];
@@ -170,8 +222,24 @@ export default function Collaborators() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{collab.email || "-"}</p>
+                  {collab.phone && (
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Phone className="h-2.5 w-2.5" /> {collab.phone}
+                    </p>
+                  )}
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                <div className="flex items-center gap-1 shrink-0">
+                  {user?.role === "admin" && (
+                    <button
+                      onClick={(e) => handleEdit(collab, e)}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Editar colaborador"
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  )}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
               </div>
 
               {/* Task Stats */}
@@ -227,6 +295,61 @@ export default function Collaborators() {
           </p>
         </div>
       )}
+
+      {/* Edit User Dialog */}
+      <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) setEditUser(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Colaborador</DialogTitle>
+            <DialogDescription>Atualize os dados do colaborador.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={editForm.name}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Nome completo"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                value={editForm.email}
+                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@exemplo.com"
+                type="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone (WhatsApp)</Label>
+              <Input
+                value={editForm.phone}
+                onChange={e => setEditForm(f => ({ ...f, phone: formatPhone(e.target.value) }))}
+                placeholder="+55 (11) 99999-9999"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Função</Label>
+              <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">Colaborador</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={updateUserMutation.isPending}>
+              {updateUserMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
