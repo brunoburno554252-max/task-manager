@@ -33,6 +33,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import confetti from "canvas-confetti";
 
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "completed";
@@ -328,6 +329,10 @@ export default function CollaboratorKanban() {
 
   const statusMutation = trpc.tasks.updateStatus.useMutation({
     onMutate: async ({ id, status: newStatus }) => {
+      // Confetti celebration when completing a task
+      if (newStatus === "completed") {
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ["#10b981", "#34d399", "#6ee7b7", "#a78bfa", "#818cf8"] });
+      }
       await utils.tasks.list.cancel();
       const prev = utils.tasks.list.getData({ assigneeId: userId });
       utils.tasks.list.setData({ assigneeId: userId }, (old: any) => {
