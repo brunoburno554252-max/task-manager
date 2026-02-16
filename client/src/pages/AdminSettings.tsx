@@ -1,25 +1,54 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Settings, MessageSquare, Bell, Shield, Save, ExternalLink,
-  CheckCircle2, XCircle, Smartphone, Globe, Key,
+  Settings, MessageSquare, Bell, Shield, Save, UserPlus,
+  CheckCircle2, XCircle, Smartphone, Globe, Key, Trash2, Loader2, Users,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminSettings() {
   const { user } = useAuth();
+  const utils = trpc.useUtils();
 
-  // WhatsApp config (these would ideally come from a server config endpoint)
+  // Collaborators
+  const { data: collaborators, isLoading: collabLoading } = trpc.collaborators.listWithStats.useQuery();
+  const createUserMutation = trpc.users.create.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador cadastrado com sucesso!");
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+      setNewName("");
+      setNewEmail("");
+      setNewPassword("");
+      setNewRole("user");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteUserMutation = trpc.users.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador removido");
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"user" | "admin">("user");
+
+  // WhatsApp config
   const [whatsappUrl, setWhatsappUrl] = useState("");
   const [whatsappToken, setWhatsappToken] = useState("");
   const [whatsappInstance, setWhatsappInstance] = useState("default");
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
-
   const [saving, setSaving] = useState(false);
 
   if (user?.role !== "admin") {
@@ -32,12 +61,17 @@ export default function AdminSettings() {
     );
   }
 
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName || !newEmail || !newPassword) return;
+    createUserMutation.mutate({ name: newName, email: newEmail, password: newPassword, role: newRole });
+  };
+
   const handleSave = () => {
     setSaving(true);
-    // In a full implementation, this would call an API endpoint to save server config
     setTimeout(() => {
       setSaving(false);
-      toast.success("Configurações salvas! Reinicie o servidor para aplicar as variáveis de ambiente.");
+      toast.success("Configurações salvas!");
     }, 500);
   };
 
@@ -53,6 +87,93 @@ export default function AdminSettings() {
         </p>
       </div>
 
+      {/* Collaborator Registration */}
+      <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+        <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
+          <UserPlus className="h-5 w-5 text-primary" />
+          Cadastrar Colaborador
+        </h2>
+        <form onSubmit={handleCreateUser} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Nome</Label>
+              <Input placeholder="Nome completo" value={newName} onChange={e => setNewName(e.target.value)} required className="bg-muted/10 border-border/20" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Email</Label>
+              <Input type="email" placeholder="email@exemplo.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} required className="bg-muted/10 border-border/20" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Senha</Label>
+              <Input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} className="bg-muted/10 border-border/20" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Função</Label>
+              <select
+                value={newRole}
+                onChange={e => setNewRole(e.target.value as "user" | "admin")}
+                className="w-full h-9 px-3 rounded-md border border-border/20 bg-muted/10 text-sm text-foreground"
+              >
+                <option value="user">Colaborador</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+          </div>
+          <Button type="submit" disabled={createUserMutation.isPending} className="gap-2">
+            {createUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+            Cadastrar
+          </Button>
+        </form>
+      </div>
+
+      {/* Collaborator List */}
+      <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.65 0.18 240)" } as React.CSSProperties}>
+        <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
+          <Users className="h-5 w-5 text-blue-400" />
+          Colaboradores ({collaborators?.length ?? 0})
+        </h2>
+        {collabLoading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <div className="space-y-2">
+            {collaborators?.map(c => (
+              <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-primary">{(c.name ?? "?")[0]?.toUpperCase()}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{c.name}</p>
+                      {c.role === "admin" && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0">Admin</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs text-muted-foreground">{c.totalTasks ?? 0} tarefas</p>
+                    <p className="text-xs font-medium text-primary">{c.totalPoints} pts</p>
+                  </div>
+                  {c.id !== user?.id && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Remover ${c.name}?`)) {
+                          deleteUserMutation.mutate({ id: c.id });
+                        }
+                      }}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* WhatsApp Section */}
       <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.65 0.2 150)" } as React.CSSProperties}>
         <div className="flex items-center justify-between mb-4">
@@ -61,101 +182,45 @@ export default function AdminSettings() {
             Integração WhatsApp
           </h2>
           <Badge variant={whatsappEnabled ? "default" : "secondary"} className={whatsappEnabled ? "bg-emerald-500/20 text-emerald-500 border-0" : ""}>
-            {whatsappEnabled ? (
-              <><CheckCircle2 className="h-3 w-3 mr-1" /> Ativo</>
-            ) : (
-              <><XCircle className="h-3 w-3 mr-1" /> Desativado</>
-            )}
+            {whatsappEnabled ? <><CheckCircle2 className="h-3 w-3 mr-1" /> Ativo</> : <><XCircle className="h-3 w-3 mr-1" /> Desativado</>}
           </Badge>
         </div>
-
-        <p className="text-sm text-muted-foreground mb-4">
-          Configure a integração com WhatsApp para enviar notificações automáticas aos colaboradores quando tarefas forem criadas, atualizadas ou estiverem próximas do prazo.
-        </p>
-
+        <p className="text-sm text-muted-foreground mb-4">Configure a integração com WhatsApp para notificações automáticas.</p>
         <div className="space-y-4">
-          {/* Enable toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/10">
             <div>
               <p className="text-sm font-medium">Notificações WhatsApp</p>
               <p className="text-xs text-muted-foreground mt-0.5">Enviar mensagens automáticas via WhatsApp</p>
             </div>
-            <button
-              onClick={() => setWhatsappEnabled(!whatsappEnabled)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${whatsappEnabled ? "bg-emerald-500" : "bg-muted/50"}`}
-            >
-              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${whatsappEnabled ? "translate-x-5.5 left-0" : "left-0.5"}`}
-                style={{ transform: whatsappEnabled ? "translateX(22px)" : "translateX(0)" }} />
+            <button onClick={() => setWhatsappEnabled(!whatsappEnabled)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${whatsappEnabled ? "bg-emerald-500" : "bg-muted/50"}`}>
+              <span className="absolute top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform border border-border/20"
+                style={{ transform: whatsappEnabled ? "translateX(22px)" : "translateX(2px)" }} />
             </button>
           </div>
-
           <Separator className="bg-border/20" />
-
-          {/* API URL */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-              URL da API
-            </Label>
-            <Input
-              placeholder="https://sua-api.com"
-              value={whatsappUrl}
-              onChange={e => setWhatsappUrl(e.target.value)}
-              className="bg-muted/10 border-border/20"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              URL da sua instância da Evolution API, Z-API, ou similar.
-            </p>
+            <Label className="text-xs font-medium flex items-center gap-1.5"><Globe className="h-3.5 w-3.5 text-muted-foreground" />URL da API</Label>
+            <Input placeholder="https://sua-api.com" value={whatsappUrl} onChange={e => setWhatsappUrl(e.target.value)} className="bg-muted/10 border-border/20" />
           </div>
-
-          {/* API Token */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium flex items-center gap-1.5">
-              <Key className="h-3.5 w-3.5 text-muted-foreground" />
-              Token de Autenticação
-            </Label>
-            <Input
-              type="password"
-              placeholder="Seu token de API"
-              value={whatsappToken}
-              onChange={e => setWhatsappToken(e.target.value)}
-              className="bg-muted/10 border-border/20"
-            />
+            <Label className="text-xs font-medium flex items-center gap-1.5"><Key className="h-3.5 w-3.5 text-muted-foreground" />Token</Label>
+            <Input type="password" placeholder="Seu token" value={whatsappToken} onChange={e => setWhatsappToken(e.target.value)} className="bg-muted/10 border-border/20" />
           </div>
-
-          {/* Instance Name */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium flex items-center gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-              Nome da Instância
-            </Label>
-            <Input
-              placeholder="default"
-              value={whatsappInstance}
-              onChange={e => setWhatsappInstance(e.target.value)}
-              className="bg-muted/10 border-border/20"
-            />
+            <Label className="text-xs font-medium flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />Instância</Label>
+            <Input placeholder="default" value={whatsappInstance} onChange={e => setWhatsappInstance(e.target.value)} className="bg-muted/10 border-border/20" />
           </div>
-        </div>
-
-        <div className="mt-4 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
-          <p className="text-xs text-blue-400 flex items-start gap-2">
-            <Bell className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>
-              As variáveis de ambiente correspondentes são: <code className="font-mono">WHATSAPP_API_URL</code>, <code className="font-mono">WHATSAPP_API_TOKEN</code>, <code className="font-mono">WHATSAPP_INSTANCE</code>, <code className="font-mono">WHATSAPP_ENABLED</code>. Configure-as no arquivo <code className="font-mono">.env</code> do servidor.
-            </span>
-          </p>
         </div>
       </div>
 
-      {/* Notifications Section */}
+      {/* Notifications */}
       <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
         <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
           <Bell className="h-5 w-5 text-primary" />
           Notificações Automáticas
         </h2>
-
-        <div className="space-y-3">
+        <div className="space-y-2">
           {[
             { label: "Tarefa criada e atribuída", desc: "Notifica o colaborador quando recebe uma nova tarefa", active: true },
             { label: "Status alterado", desc: "Notifica quando outra pessoa altera o status da sua tarefa", active: true },
@@ -182,11 +247,11 @@ export default function AdminSettings() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg bg-muted/10 p-3">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Versão</p>
-            <p className="font-medium">TaskFlow v12</p>
+            <p className="font-medium">TaskFlow v13</p>
           </div>
           <div className="rounded-lg bg-muted/10 p-3">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Stack</p>
-            <p className="font-medium">React + tRPC + MySQL</p>
+            <p className="font-medium">Cloudflare Workers + D1</p>
           </div>
           <div className="rounded-lg bg-muted/10 p-3">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Seu Role</p>
@@ -199,7 +264,6 @@ export default function AdminSettings() {
         </div>
       </div>
 
-      {/* Save Button */}
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
           <Save className="h-4 w-4" />

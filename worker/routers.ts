@@ -65,6 +65,65 @@ export const appRouter = router({
         await updateUser(ctx.db, ctx.user.id, input as any);
         return { success: true };
       }),
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        email: z.string().email().max(320),
+        password: z.string().min(6),
+        role: z.enum(["user", "admin"]).default("user"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { eq } = await import("drizzle-orm");
+        const { users } = await import("../drizzle/schema-d1");
+        // Check if email exists
+        const existing = await ctx.db.select().from(users).where(eq(users.email, input.email)).limit(1);
+        if (existing.length > 0) {
+          throw new Error("Este email já está cadastrado");
+        }
+        // Hash password
+        const encoder = new TextEncoder();
+        const data = encoder.encode(input.password);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const passwordHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        const now = new Date().toISOString();
+        const openId = `user-${crypto.randomUUID()}`;
+        const result = await ctx.db.insert(users).values({
+          openId,
+          name: input.name,
+          email: input.email,
+          role: input.role,
+          passwordHash,
+          totalPoints: 0,
+          createdAt: now,
+          updatedAt: now,
+          lastSignedIn: now,
+        }).returning({ id: users.id });
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "created",
+          entityType: "user",
+          entityId: result[0].id,
+          details: `Cadastrou o colaborador "${input.name}"`,
+        });
+        return { success: true, userId: result[0].id };
+      }),
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.id === ctx.user.id) throw new Error("Não pode excluir a si mesmo");
+        const { eq } = await import("drizzle-orm");
+        const { users } = await import("../drizzle/schema-d1");
+        await ctx.db.delete(users).where(eq(users.id, input.id));
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "deleted",
+          entityType: "user",
+          entityId: input.id,
+          details: `Removeu o colaborador #${input.id}`,
+        });
+        return { success: true };
+      }),
   }),
 
   tasks: router({

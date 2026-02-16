@@ -180,8 +180,7 @@
     backdrop-filter: blur(20px);
     border: 1px solid oklch(0.3 0.02 270 / 0.3);
   }
-  :root:not(.dark) .glass-card,
-  :not(.dark) .glass-card {
+  :root:not(.dark) .glass-card {
     background: oklch(0.99 0.002 270 / 0.7);
     border: 1px solid oklch(0.85 0.01 270 / 0.5);
     box-shadow: 0 4px 24px oklch(0 0 0 / 0.06);
@@ -191,8 +190,7 @@
   .glow-primary {
     box-shadow: 0 0 20px oklch(0.72 0.19 280 / 0.15), 0 0 60px oklch(0.72 0.19 280 / 0.05);
   }
-  :root:not(.dark) .glow-primary,
-  :not(.dark) .glow-primary {
+  :root:not(.dark) .glow-primary {
     box-shadow: 0 0 20px oklch(0.65 0.22 340 / 0.15), 0 0 60px oklch(0.65 0.22 340 / 0.05);
   }
 
@@ -203,8 +201,7 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  :root:not(.dark) .gradient-text,
-  :not(.dark) .gradient-text {
+  :root:not(.dark) .gradient-text {
     background: linear-gradient(135deg, oklch(0.55 0.22 340), oklch(0.5 0.2 310));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -219,8 +216,7 @@
     backdrop-filter: blur(10px);
     transition: all 0.12s ease;
   }
-  :root:not(.dark) .kanban-column-premium,
-  :not(.dark) .kanban-column-premium {
+  :root:not(.dark) .kanban-column-premium {
     background: linear-gradient(180deg, oklch(0.98 0.003 270 / 0.95), oklch(0.96 0.005 270 / 0.9));
     border: 1px solid oklch(0.88 0.01 270 / 0.6);
     box-shadow: 0 2px 12px oklch(0 0 0 / 0.04);
@@ -237,8 +233,7 @@
     transition: all 0.12s cubic-bezier(0.25, 1, 0.5, 1);
     overflow: hidden;
   }
-  :root:not(.dark) .kanban-card-premium,
-  :not(.dark) .kanban-card-premium {
+  :root:not(.dark) .kanban-card-premium {
     background: oklch(0.995 0.001 270);
     border: 1px solid oklch(0.88 0.01 270 / 0.6);
     box-shadow: 0 1px 4px oklch(0 0 0 / 0.05);
@@ -248,8 +243,7 @@
     box-shadow: 0 8px 32px oklch(0 0 0 / 0.3), 0 0 20px oklch(0.72 0.19 280 / 0.06);
     transform: translateY(-2px);
   }
-  :root:not(.dark) .kanban-card-premium:hover,
-  :not(.dark) .kanban-card-premium:hover {
+  :root:not(.dark) .kanban-card-premium:hover {
     border-color: oklch(0.65 0.22 340 / 0.35);
     box-shadow: 0 8px 24px oklch(0 0 0 / 0.08), 0 0 15px oklch(0.65 0.22 340 / 0.06);
   }
@@ -265,8 +259,7 @@
     border-color: oklch(0.72 0.19 280 / 0.5);
     transition: none;
   }
-  :root:not(.dark) .kanban-card-overlay,
-  :not(.dark) .kanban-card-overlay {
+  :root:not(.dark) .kanban-card-overlay {
     box-shadow: 0 20px 60px oklch(0 0 0 / 0.15), 0 0 30px oklch(0.65 0.22 340 / 0.1);
     border-color: oklch(0.65 0.22 340 / 0.5);
   }
@@ -278,8 +271,7 @@
     background: linear-gradient(180deg, oklch(0.18 0.025 270 / 0.95), oklch(0.16 0.02 270 / 0.85));
     transition: all 0.1s ease;
   }
-  :root:not(.dark) .kanban-column-premium.drag-over,
-  :not(.dark) .kanban-column-premium.drag-over {
+  :root:not(.dark) .kanban-column-premium.drag-over {
     border-color: oklch(0.65 0.22 340 / 0.5);
     box-shadow: inset 0 0 30px oklch(0.65 0.22 340 / 0.06), 0 0 15px oklch(0.65 0.22 340 / 0.08);
     background: linear-gradient(180deg, oklch(0.97 0.01 340 / 0.95), oklch(0.95 0.015 340 / 0.9));
@@ -290,8 +282,7 @@
     background: linear-gradient(180deg, oklch(0.15 0.018 270), oklch(0.13 0.015 270));
     border-left: 1px solid oklch(0.28 0.02 270 / 0.4);
   }
-  :root:not(.dark) .task-detail-sheet,
-  :not(.dark) .task-detail-sheet {
+  :root:not(.dark) .task-detail-sheet {
     background: oklch(0.995 0.001 270);
     border-left: 1px solid oklch(0.9 0.01 270);
   }
@@ -313,8 +304,7 @@
     color: oklch(0.55 0.02 270);
     border: 1px solid oklch(0.28 0.02 270 / 0.3);
   }
-  :root:not(.dark) .pipeline-step.inactive,
-  :not(.dark) .pipeline-step.inactive {
+  :root:not(.dark) .pipeline-step.inactive {
     background: oklch(0.95 0.005 270);
     color: oklch(0.5 0.02 270);
     border: 1px solid oklch(0.88 0.01 270 / 0.5);
@@ -324,8 +314,7 @@
     border-color: oklch(0.35 0.025 270 / 0.5);
     color: oklch(0.7 0.02 270);
   }
-  :root:not(.dark) .pipeline-step.inactive:hover,
-  :not(.dark) .pipeline-step.inactive:hover {
+  :root:not(.dark) .pipeline-step.inactive:hover {
     background: oklch(0.92 0.008 270);
     color: oklch(0.35 0.02 270);
   }
@@ -334,8 +323,7 @@
     color: oklch(0.65 0.04 270);
     border: 1px solid oklch(0.32 0.03 270 / 0.4);
   }
-  :root:not(.dark) .pipeline-step.past,
-  :not(.dark) .pipeline-step.past {
+  :root:not(.dark) .pipeline-step.past {
     background: oklch(0.93 0.01 340);
     color: oklch(0.5 0.15 340);
     border: 1px solid oklch(0.85 0.05 340 / 0.4);
@@ -348,8 +336,7 @@
     border-radius: 0 0.75rem 0.75rem 0.75rem;
     transition: all 0.2s ease;
   }
-  :root:not(.dark) .comment-bubble,
-  :not(.dark) .comment-bubble {
+  :root:not(.dark) .comment-bubble {
     background: oklch(0.96 0.005 270);
     border: 1px solid oklch(0.9 0.01 270 / 0.5);
   }
@@ -368,8 +355,7 @@
     width: 1px;
     background: oklch(0.28 0.02 270 / 0.3);
   }
-  :root:not(.dark) .activity-timeline-item::before,
-  :not(.dark) .activity-timeline-item::before {
+  :root:not(.dark) .activity-timeline-item::before {
     background: oklch(0.88 0.01 270 / 0.5);
   }
   .activity-timeline-item:last-child::before {
@@ -389,8 +375,7 @@
     background: oklch(0.2 0.015 270);
     color: oklch(0.7 0.02 270);
   }
-  :root:not(.dark) .view-toggle-btn:hover,
-  :not(.dark) .view-toggle-btn:hover {
+  :root:not(.dark) .view-toggle-btn:hover {
     background: oklch(0.94 0.005 270);
     color: oklch(0.3 0.02 270);
   }
@@ -399,8 +384,7 @@
     color: oklch(0.82 0.15 280);
     border: 1px solid oklch(0.72 0.19 280 / 0.25);
   }
-  :root:not(.dark) .view-toggle-btn.active,
-  :not(.dark) .view-toggle-btn.active {
+  :root:not(.dark) .view-toggle-btn.active {
     background: oklch(0.65 0.22 340 / 0.12);
     color: oklch(0.5 0.2 340);
     border: 1px solid oklch(0.65 0.22 340 / 0.25);
@@ -414,8 +398,7 @@
     border-radius: 1rem;
     overflow: hidden;
   }
-  :root:not(.dark) .stat-card,
-  :not(.dark) .stat-card {
+  :root:not(.dark) .stat-card {
     background: oklch(0.995 0.001 270);
     border: 1px solid oklch(0.9 0.01 270 / 0.6);
     box-shadow: 0 2px 12px oklch(0 0 0 / 0.04);
@@ -429,8 +412,7 @@
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--stat-accent, oklch(0.72 0.19 280)), transparent);
   }
-  :root:not(.dark) .stat-card::before,
-  :not(.dark) .stat-card::before {
+  :root:not(.dark) .stat-card::before {
     background: linear-gradient(90deg, transparent, var(--stat-accent, oklch(0.65 0.22 340)), transparent);
   }
 }
