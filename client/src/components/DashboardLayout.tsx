@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { LoginPage } from "./LoginPage";
 import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -21,7 +22,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Columns3, Trophy, Award,
@@ -69,39 +69,7 @@ export default function DashboardLayout({
   }
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, oklch(0.72 0.19 280), transparent)' }} />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full opacity-8" style={{ background: 'radial-gradient(circle, oklch(0.65 0.2 310), transparent)' }} />
-        </div>
-        <div className="relative flex flex-col items-center gap-8 p-10 max-w-md w-full">
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center glow-primary">
-                <Zap className="h-6 w-6 text-primary" />
-              </div>
-              <span className="text-3xl font-bold tracking-tight gradient-text">TaskFlow</span>
-            </div>
-            <h1 className="text-xl font-semibold tracking-tight text-center text-foreground">
-              Bem-vindo de volta
-            </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed">
-              Faça login para acessar o painel de gestão de tarefas e acompanhar o desempenho da sua equipe.
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              window.location.href = getLoginUrl();
-            }}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all duration-300 font-semibold"
-          >
-            Entrar na plataforma
-          </Button>
-        </div>
-      </div>
-    );
+    return <LoginPage />;
   }
 
   return (
