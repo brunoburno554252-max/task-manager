@@ -36,9 +36,9 @@ import { Badge } from "./ui/badge";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Columns3, label: "Kanban", path: "/kanban" },
+  { icon: Columns3, label: "Colaboradores", path: "/kanban" },
   { icon: Zap, label: "Minhas Tarefas", path: "/kanban/me", dynamic: true },
-  { icon: Users, label: "Colaboradores", path: "/collaborators", adminOnly: true },
+  { icon: Users, label: "Cadastros", path: "/collaborators", adminOnly: true },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },

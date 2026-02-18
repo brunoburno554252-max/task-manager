@@ -17,6 +17,7 @@ const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Chat = lazy(() => import("./pages/Chat"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
+const Cadastros = lazy(() => import("./pages/Cadastros"));
 
 function PageLoader() {
   return (
@@ -36,7 +37,7 @@ function Router() {
         <Switch>
           <Route path={"/"} component={Home} />
           <Route path={"/kanban"} component={Collaborators} />
-          <Route path={"/collaborators"} component={Collaborators} />
+          <Route path={"/collaborators"} component={Cadastros} />
           <Route path={"/kanban/:userId"} component={CollaboratorKanban} />
           <Route path={"/ranking"} component={Ranking} />
           <Route path={"/badges"} component={Badges} />
