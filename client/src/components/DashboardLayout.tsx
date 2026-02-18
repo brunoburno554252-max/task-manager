@@ -37,6 +37,7 @@ import { Badge } from "./ui/badge";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Columns3, label: "Kanban", path: "/kanban" },
+  { icon: Zap, label: "Minhas Tarefas", path: "/kanban/me", dynamic: true },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
@@ -193,12 +194,13 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1 space-y-0.5">
               {menuItems.filter(item => !(item as any).adminOnly || user?.role === "admin").map(item => {
-                const isActive = location === item.path;
+                const resolvedPath = (item as any).dynamic && user ? `/kanban/${user.id}` : item.path;
+                const isActive = (item as any).dynamic ? location === `/kanban/${user?.id}` : location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      onClick={() => setLocation(resolvedPath)}
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal ${isActive ? "bg-primary/10 text-primary font-medium shadow-sm shadow-primary/5" : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
                     >
