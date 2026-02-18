@@ -182,13 +182,24 @@ export const appRouter = router({
         offset: z.number().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        return listTasks(ctx.db, input);
+        // Se não for admin, forçar ver apenas as próprias tarefas
+        const filters = { ...input };
+        if (ctx.user.role !== "admin") {
+          filters.assigneeId = ctx.user.id;
+        }
+        return listTasks(ctx.db, filters);
       }),
 
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
-        return getTaskById(ctx.db, input.id);
+        const task = await getTaskById(ctx.db, input.id);
+        if (!task) return null;
+        // Se não for admin, só pode ver tarefa atribuída a si
+        if (ctx.user.role !== "admin" && task.assigneeId !== ctx.user.id) {
+          throw new Error("Sem permissão para ver esta tarefa");
+        }
+        return task;
       }),
 
     update: protectedProcedure
@@ -487,7 +498,9 @@ export const appRouter = router({
     stats: protectedProcedure
       .input(z.object({ userId: z.number().optional() }).optional())
       .query(async ({ ctx, input }) => {
-        return getDashboardStats(ctx.db, input?.userId);
+        // Se não for admin, forçar ver apenas seus próprios dados
+        const userId = ctx.user.role !== "admin" ? ctx.user.id : input?.userId;
+        return getDashboardStats(ctx.db, userId);
       }),
     recentCompletions: protectedProcedure
       .input(z.object({ days: z.number().optional() }).optional())
@@ -503,7 +516,12 @@ export const appRouter = router({
         limit: z.number().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        return getActivityLog(ctx.db, input);
+        // Se não for admin, forçar ver apenas suas próprias atividades
+        const filters = { ...input };
+        if (ctx.user.role !== "admin") {
+          filters.userId = ctx.user.id;
+        }
+        return getActivityLog(ctx.db, filters);
       }),
   }),
 
