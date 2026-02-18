@@ -36,6 +36,7 @@ function Router() {
         <Switch>
           <Route path={"/"} component={Home} />
           <Route path={"/kanban"} component={Collaborators} />
+          <Route path={"/collaborators"} component={Collaborators} />
           <Route path={"/kanban/:userId"} component={CollaboratorKanban} />
           <Route path={"/ranking"} component={Ranking} />
           <Route path={"/badges"} component={Badges} />

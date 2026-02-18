@@ -25,7 +25,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, Columns3, Trophy, Award,
-  Activity, LogOut, PanelLeft, User, Zap, MessageCircle, Sun, Moon, Settings,
+  Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -38,6 +38,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Columns3, label: "Kanban", path: "/kanban" },
   { icon: Zap, label: "Minhas Tarefas", path: "/kanban/me", dynamic: true },
+  { icon: Users, label: "Colaboradores", path: "/collaborators", adminOnly: true },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
