@@ -125,6 +125,11 @@ export default function Collaborators() {
             </p>
           </div>
         </div>
+        {user && (
+          <Button onClick={() => setLocation(`/kanban/${user.id}`)} className="gap-2">
+            <Zap className="h-4 w-4" /> Minhas Tarefas
+          </Button>
+        )}
       </div>
 
       {/* Summary Stats */}

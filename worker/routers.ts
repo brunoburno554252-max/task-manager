@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { users } from "../drizzle/schema-d1";
 import { publicProcedure, router, protectedProcedure, adminProcedure } from "./trpc";
 import { z } from "zod";
 import {
@@ -73,8 +75,8 @@ export const appRouter = router({
         role: z.enum(["user", "admin"]).default("user"),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { eq } = await import("drizzle-orm");
-        const { users } = await import("../drizzle/schema-d1");
+        
+        
         // Check if email exists
         const existing = await ctx.db.select().from(users).where(eq(users.email, input.email)).limit(1);
         if (existing.length > 0) {
@@ -112,8 +114,8 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         if (input.id === ctx.user.id) throw new Error("Não pode excluir a si mesmo");
-        const { eq } = await import("drizzle-orm");
-        const { users } = await import("../drizzle/schema-d1");
+        
+        
         await ctx.db.delete(users).where(eq(users.id, input.id));
         await logActivity(ctx.db, {
           userId: ctx.user.id,
@@ -341,6 +343,24 @@ export const appRouter = router({
     myPoints: protectedProcedure.query(async ({ ctx }) => {
       return getUserPoints(ctx.db, ctx.user.id);
     }),
+    adjustPoints: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        points: z.number(),
+        reason: z.string().min(1).max(255),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await addPoints(ctx.db, input.userId, input.points, input.reason);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: input.points > 0 ? "awarded_points" : "deducted_points",
+          entityType: "user",
+          entityId: input.userId,
+          details: `${input.points > 0 ? "Concedeu" : "Removeu"} ${Math.abs(input.points)} pontos: ${input.reason}`,
+        });
+        const newBadges = await checkAndAwardBadges(ctx.db, input.userId);
+        return { success: true, newBadges: newBadges.map(b => b.name) };
+      }),
   }),
 
   dashboard: router({

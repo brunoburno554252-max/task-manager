@@ -8,9 +8,131 @@ import { Separator } from "@/components/ui/separator";
 import {
   Settings, MessageSquare, Bell, Shield, Save, UserPlus,
   CheckCircle2, XCircle, Smartphone, Globe, Key, Trash2, Loader2, Users,
+  Star, Trophy, Plus, Minus,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+type Collaborator = {
+  id: number;
+  name: string | null;
+  email: string | null;
+  role: string | null;
+  totalPoints: number;
+  totalTasks: number | null;
+  [key: string]: unknown;
+};
+
+function PointsManager({ collaborators }: { collaborators: Collaborator[] }) {
+  const utils = trpc.useUtils();
+  const [selectedUser, setSelectedUser] = useState<number | "">("");
+  const [pointsAmount, setPointsAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [isPositive, setIsPositive] = useState(true);
+
+  const adjustPointsMutation = trpc.gamification.adjustPoints.useMutation({
+    onSuccess: (data) => {
+      const badges = data.newBadges;
+      toast.success(
+        `Pontos ${isPositive ? "concedidos" : "removidos"} com sucesso!` +
+        (badges && badges.length > 0 ? ` Novos badges: ${badges.join(", ")}` : "")
+      );
+      utils.collaborators.listWithStats.invalidate();
+      utils.gamification.ranking.invalidate();
+      setPointsAmount("");
+      setReason("");
+      setSelectedUser("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pts = parseInt(pointsAmount);
+    if (!selectedUser || !pts || !reason.trim()) return;
+    adjustPointsMutation.mutate({
+      userId: selectedUser as number,
+      points: isPositive ? pts : -pts,
+      reason: reason.trim(),
+    });
+  };
+
+  return (
+    <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.75 0.18 50)" } as React.CSSProperties}>
+      <h2 className="text-base font-semibold flex items-center gap-2 mb-4">
+        <Trophy className="h-5 w-5 text-amber-400" />
+        Gerenciar Pontos
+      </h2>
+      <p className="text-sm text-muted-foreground mb-4">
+        Conceda ou remova pontos dos colaboradores manualmente.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Colaborador</Label>
+          <select
+            value={selectedUser}
+            onChange={e => setSelectedUser(e.target.value ? parseInt(e.target.value) : "")}
+            required
+            className="w-full h-9 px-3 rounded-md border border-border/20 bg-muted/10 text-sm text-foreground"
+          >
+            <option value="">Selecione um colaborador</option>
+            {collaborators.map(c => (
+              <option key={c.id} value={c.id}>{c.name} ({c.totalPoints} pts)</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Tipo</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPositive(true)}
+                className={`flex-1 h-9 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${isPositive ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30" : "bg-muted/10 text-muted-foreground border border-border/20"}`}
+              >
+                <Plus className="h-3.5 w-3.5" /> Dar
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPositive(false)}
+                className={`flex-1 h-9 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${!isPositive ? "bg-red-500/20 text-red-500 border border-red-500/30" : "bg-muted/10 text-muted-foreground border border-border/20"}`}
+              >
+                <Minus className="h-3.5 w-3.5" /> Tirar
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Quantidade</Label>
+            <Input
+              type="number"
+              min="1"
+              max="1000"
+              placeholder="Ex: 50"
+              value={pointsAmount}
+              onChange={e => setPointsAmount(e.target.value)}
+              required
+              className="bg-muted/10 border-border/20"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Motivo</Label>
+          <Input
+            placeholder="Ex: Entrega excepcional do projeto X"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            required
+            className="bg-muted/10 border-border/20"
+          />
+        </div>
+        <Button type="submit" disabled={adjustPointsMutation.isPending} className="gap-2">
+          {adjustPointsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
+          {isPositive ? "Conceder Pontos" : "Remover Pontos"}
+        </Button>
+      </form>
+    </div>
+  );
+}
 
 export default function AdminSettings() {
   const { user } = useAuth();
@@ -173,6 +295,9 @@ export default function AdminSettings() {
           </div>
         )}
       </div>
+
+      {/* Points Management */}
+      <PointsManager collaborators={collaborators ?? []} />
 
       {/* WhatsApp Section */}
       <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.65 0.2 150)" } as React.CSSProperties}>
