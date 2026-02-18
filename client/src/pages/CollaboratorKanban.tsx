@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -19,6 +21,7 @@ import {
   Clock, CheckCircle2, Circle, Flame, Zap, ArrowUp, ArrowRight,
   ArrowDown, Search, X, MessageSquare, History, Send,
   Columns3, LayoutGrid, List, Eye, ChevronRight,
+  ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -295,6 +298,13 @@ export default function CollaboratorKanban() {
   const [newDesc, setNewDesc] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [newDueDate, setNewDueDate] = useState("");
+  const [newChecklistItems, setNewChecklistItems] = useState<string[]>([]);
+  const [newChecklistInput, setNewChecklistInput] = useState("");
+
+  // Checklist inline add state (detail panel)
+  const [inlineChecklistInput, setInlineChecklistInput] = useState("");
+  const [editingChecklistId, setEditingChecklistId] = useState<number | null>(null);
+  const [editingChecklistTitle, setEditingChecklistTitle] = useState("");
 
   // Comment state
   const [commentText, setCommentText] = useState("");
@@ -314,6 +324,14 @@ export default function CollaboratorKanban() {
     { taskId: selectedTask?.id ?? 0 },
     { enabled: !!selectedTask }
   );
+  const { data: checklistItems } = trpc.tasks.checklist.useQuery(
+    { taskId: selectedTask?.id ?? 0 },
+    { enabled: !!selectedTask }
+  );
+  const { data: attachments } = trpc.tasks.attachments.useQuery(
+    { taskId: selectedTask?.id ?? 0 },
+    { enabled: !!selectedTask }
+  );
 
   // Mutations
   const createMutation = trpc.tasks.create.useMutation({
@@ -322,6 +340,7 @@ export default function CollaboratorKanban() {
       utils.collaborators.listWithStats.invalidate();
       setShowCreateDialog(false);
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewDueDate("");
+      setNewChecklistItems([]); setNewChecklistInput("");
       toast.success("Tarefa criada com sucesso!");
     },
     onError: (err) => toast.error(err.message),
@@ -372,6 +391,30 @@ export default function CollaboratorKanban() {
       setCommentText("");
       toast.success("Comentário adicionado!");
     },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Checklist mutations
+  const addChecklistMutation = trpc.tasks.addChecklistItem.useMutation({
+    onSuccess: () => { utils.tasks.checklist.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const updateChecklistMutation = trpc.tasks.updateChecklistItem.useMutation({
+    onSuccess: () => { utils.tasks.checklist.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteChecklistMutation = trpc.tasks.deleteChecklistItem.useMutation({
+    onSuccess: () => { utils.tasks.checklist.invalidate(); toast.success("Item removido!"); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Attachment mutations
+  const addAttachmentMutation = trpc.tasks.addAttachment.useMutation({
+    onSuccess: () => { utils.tasks.attachments.invalidate(); toast.success("Anexo enviado!"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteAttachmentMutation = trpc.tasks.deleteAttachment.useMutation({
+    onSuccess: () => { utils.tasks.attachments.invalidate(); toast.success("Anexo removido!"); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -548,6 +591,42 @@ export default function CollaboratorKanban() {
     setLocalStatusOverrides({}); setLocalOrderOverrides({});
   };
 
+  // File upload handler
+  const handleFileUpload = useCallback((taskId: number, files: FileList | null) => {
+    if (!files) return;
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    Array.from(files).forEach(file => {
+      if (file.size > maxSize) {
+        toast.error(`Arquivo "${file.name}" excede o limite de 5MB`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(",")[1];
+        addAttachmentMutation.mutate({
+          taskId,
+          fileName: file.name,
+          fileType: file.type || "application/octet-stream",
+          fileSize: file.size,
+          fileData: base64,
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [addAttachmentMutation]);
+
+  const getFileIcon = (type: string) => {
+    if (type.startsWith("image/")) return FileImage;
+    if (type.includes("pdf") || type.includes("document") || type.includes("text")) return FileText;
+    return File;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
   const activeTask = activeId ? tasks.find(t => t.id === parseInt(activeId.replace("task-", ""))) : null;
   const initials = (collabUser?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
@@ -644,6 +723,171 @@ export default function CollaboratorKanban() {
                     <p className="text-sm leading-relaxed bg-muted/10 rounded-lg p-3">{task.description}</p>
                   </div>
                 )}
+
+                {/* ===== CHECKLIST SECTION ===== */}
+                <Separator className="bg-border/20" />
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <ListChecks className="h-3.5 w-3.5" /> Checklist
+                      {checklistItems && checklistItems.length > 0 && (
+                        <span className="text-[10px] font-normal ml-1">
+                          ({(checklistItems as any[]).filter((i: any) => i.isCompleted).length}/{checklistItems.length})
+                        </span>
+                      )}
+                    </h4>
+                  </div>
+                  {checklistItems && checklistItems.length > 0 && (
+                    <div className="mb-3">
+                      <Progress
+                        value={((checklistItems as any[]).filter((i: any) => i.isCompleted).length / checklistItems.length) * 100}
+                        className="h-2"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1.5 mb-3">
+                    {(checklistItems as any[])?.map((item: any) => (
+                      <div key={item.id} className={`flex items-center gap-2 group rounded-lg px-2 py-1.5 hover:bg-muted/10 transition-colors ${item.isCompleted ? 'opacity-60' : ''}`}>
+                        <Checkbox
+                          checked={!!item.isCompleted}
+                          onCheckedChange={(checked) => {
+                            updateChecklistMutation.mutate({ id: item.id, isCompleted: !!checked });
+                          }}
+                          className="shrink-0"
+                        />
+                        {editingChecklistId === item.id ? (
+                          <Input
+                            value={editingChecklistTitle}
+                            onChange={e => setEditingChecklistTitle(e.target.value)}
+                            onBlur={() => {
+                              if (editingChecklistTitle.trim()) {
+                                updateChecklistMutation.mutate({ id: item.id, title: editingChecklistTitle.trim() });
+                              }
+                              setEditingChecklistId(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && editingChecklistTitle.trim()) {
+                                updateChecklistMutation.mutate({ id: item.id, title: editingChecklistTitle.trim() });
+                                setEditingChecklistId(null);
+                              }
+                              if (e.key === 'Escape') setEditingChecklistId(null);
+                            }}
+                            className="h-7 text-sm bg-muted/10 border-border/20"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={`flex-1 text-sm cursor-pointer ${item.isCompleted ? 'line-through text-muted-foreground' : ''}`}
+                            onDoubleClick={() => {
+                              setEditingChecklistId(item.id);
+                              setEditingChecklistTitle(item.title);
+                            }}
+                          >
+                            {item.title}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                          onClick={() => deleteChecklistMutation.mutate({ id: item.id })}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    {(!checklistItems || checklistItems.length === 0) && (
+                      <p className="text-xs text-muted-foreground/50 text-center py-2">Nenhum item no checklist</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Adicionar item ao checklist..."
+                      value={inlineChecklistInput}
+                      onChange={e => setInlineChecklistInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && inlineChecklistInput.trim()) {
+                          addChecklistMutation.mutate({
+                            taskId: task.id,
+                            title: inlineChecklistInput.trim(),
+                            sortOrder: (checklistItems?.length ?? 0),
+                          });
+                          setInlineChecklistInput("");
+                        }
+                      }}
+                      className="h-8 text-sm bg-muted/10 border-border/20"
+                    />
+                    <Button size="sm" className="h-8 px-3 shrink-0"
+                      disabled={!inlineChecklistInput.trim() || addChecklistMutation.isPending}
+                      onClick={() => {
+                        if (inlineChecklistInput.trim()) {
+                          addChecklistMutation.mutate({
+                            taskId: task.id,
+                            title: inlineChecklistInput.trim(),
+                            sortOrder: (checklistItems?.length ?? 0),
+                          });
+                          setInlineChecklistInput("");
+                        }
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ===== ATTACHMENTS SECTION ===== */}
+                <Separator className="bg-border/20" />
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5" /> Anexos
+                      {attachments && attachments.length > 0 && (
+                        <span className="text-[10px] font-normal ml-1">({attachments.length})</span>
+                      )}
+                    </h4>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+                        onChange={e => handleFileUpload(task.id, e.target.files)}
+                      />
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer">
+                        <Upload className="h-3 w-3" /> Anexar
+                      </div>
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    {(attachments as any[])?.map((att: any) => {
+                      const FIcon = getFileIcon(att.fileType);
+                      return (
+                        <div key={att.id} className="flex items-center gap-3 rounded-lg bg-muted/10 p-2.5 group">
+                          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <FIcon className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{att.fileName}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatFileSize(att.fileSize)} • {new Date(att.createdAt).toLocaleDateString("pt-BR")}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                            onClick={() => {
+                              if (confirm("Remover este anexo?")) deleteAttachmentMutation.mutate({ id: att.id });
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {(!attachments || attachments.length === 0) && (
+                      <p className="text-xs text-muted-foreground/50 text-center py-2">Nenhum anexo</p>
+                    )}
+                  </div>
+                </div>
 
                 <Separator className="bg-border/20" />
 
@@ -1068,6 +1312,53 @@ export default function CollaboratorKanban() {
                   className="mt-1 bg-muted/10 border-border/20" />
               </div>
             </div>
+
+            {/* Checklist na criação */}
+            <div>
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <ListChecks className="h-3.5 w-3.5" /> Checklist
+                {newChecklistItems.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground font-normal">({newChecklistItems.length} itens)</span>
+                )}
+              </Label>
+              <div className="mt-2 space-y-1.5">
+                {newChecklistItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 rounded-lg bg-muted/10 px-2.5 py-1.5 group">
+                    <Square className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="flex-1 text-sm">{item}</span>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                      onClick={() => setNewChecklistItems(prev => prev.filter((_, i) => i !== idx))}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  placeholder="Adicionar item e pressione Enter..."
+                  value={newChecklistInput}
+                  onChange={e => setNewChecklistInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newChecklistInput.trim()) {
+                      e.preventDefault();
+                      setNewChecklistItems(prev => [...prev, newChecklistInput.trim()]);
+                      setNewChecklistInput("");
+                    }
+                  }}
+                  className="h-8 text-sm bg-muted/10 border-border/20"
+                />
+                <Button type="button" size="sm" variant="outline" className="h-8 px-3 shrink-0"
+                  disabled={!newChecklistInput.trim()}
+                  onClick={() => {
+                    if (newChecklistInput.trim()) {
+                      setNewChecklistItems(prev => [...prev, newChecklistInput.trim()]);
+                      setNewChecklistInput("");
+                    }
+                  }}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
@@ -1079,6 +1370,7 @@ export default function CollaboratorKanban() {
                 priority: newPriority,
                 assigneeId: userId,
                 dueDate: newDueDate ? new Date(newDueDate).getTime() : undefined,
+                checklistItems: newChecklistItems.length > 0 ? newChecklistItems.map((t, i) => ({ title: t, sortOrder: i })) : undefined,
               });
             }} disabled={createMutation.isPending}>
               {createMutation.isPending ? "Criando..." : "Criar Tarefa"}
