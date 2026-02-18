@@ -159,7 +159,7 @@ export default function Collaborators() {
   const tasksByDate = useMemo(() => {
     const map: Record<string, typeof allTasks> = {};
     allTasks.forEach(task => {
-      if (task.dueDate) {
+      if (task.dueDate && typeof task.dueDate === "string") {
         const dateKey = task.dueDate.split("T")[0];
         if (!map[dateKey]) map[dateKey] = [];
         map[dateKey].push(task);
@@ -229,7 +229,7 @@ export default function Collaborators() {
     }
 
     // Also add tasks without due date
-    const noDueDateTasks = allTasks.filter(t => !t.dueDate);
+    const noDueDateTasks = allTasks.filter(t => !t.dueDate || typeof t.dueDate !== "string");
     if (noDueDateTasks.length > 0) {
       items.push({
         date: "no-date",
