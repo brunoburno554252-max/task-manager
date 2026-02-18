@@ -4,6 +4,7 @@ import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
+  checklistItems, taskAttachments,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -484,4 +485,103 @@ export async function getChatMessages(db: DrizzleD1Database, limit: number = 100
     .where(where)
     .orderBy(desc(chatMessages.createdAt))
     .limit(limit);
+}
+
+// ============ CHECKLIST ============
+
+export async function getChecklistByTaskId(db: DrizzleD1Database, taskId: number) {
+  return db.select().from(checklistItems)
+    .where(eq(checklistItems.taskId, taskId))
+    .orderBy(asc(checklistItems.sortOrder), asc(checklistItems.id));
+}
+
+export async function createChecklistItem(db: DrizzleD1Database, data: {
+  taskId: number;
+  title: string;
+  sortOrder?: number;
+}) {
+  const result = await db.insert(checklistItems).values({
+    taskId: data.taskId,
+    title: data.title,
+    isCompleted: 0,
+    sortOrder: data.sortOrder ?? 0,
+  }).returning({ id: checklistItems.id });
+  return { id: result[0].id };
+}
+
+export async function createChecklistItems(db: DrizzleD1Database, taskId: number, items: { title: string; sortOrder: number }[]) {
+  if (items.length === 0) return [];
+  const results = [];
+  for (const item of items) {
+    const result = await db.insert(checklistItems).values({
+      taskId,
+      title: item.title,
+      isCompleted: 0,
+      sortOrder: item.sortOrder,
+    }).returning({ id: checklistItems.id });
+    results.push({ id: result[0].id });
+  }
+  return results;
+}
+
+export async function updateChecklistItem(db: DrizzleD1Database, id: number, data: Partial<{
+  title: string;
+  isCompleted: number;
+  sortOrder: number;
+}>) {
+  await db.update(checklistItems).set({
+    ...data,
+    updatedAt: new Date().toISOString(),
+  }).where(eq(checklistItems.id, id));
+}
+
+export async function deleteChecklistItem(db: DrizzleD1Database, id: number) {
+  await db.delete(checklistItems).where(eq(checklistItems.id, id));
+}
+
+export async function deleteChecklistByTaskId(db: DrizzleD1Database, taskId: number) {
+  await db.delete(checklistItems).where(eq(checklistItems.taskId, taskId));
+}
+
+// ============ ATTACHMENTS ============
+
+export async function getAttachmentsByTaskId(db: DrizzleD1Database, taskId: number) {
+  return db.select({
+    id: taskAttachments.id,
+    taskId: taskAttachments.taskId,
+    fileName: taskAttachments.fileName,
+    fileSize: taskAttachments.fileSize,
+    fileType: taskAttachments.fileType,
+    uploadedById: taskAttachments.uploadedById,
+    createdAt: taskAttachments.createdAt,
+    uploaderName: users.name,
+  }).from(taskAttachments)
+    .leftJoin(users, eq(taskAttachments.uploadedById, users.id))
+    .where(eq(taskAttachments.taskId, taskId))
+    .orderBy(desc(taskAttachments.createdAt));
+}
+
+export async function getAttachmentById(db: DrizzleD1Database, id: number) {
+  const result = await db.select().from(taskAttachments).where(eq(taskAttachments.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createAttachment(db: DrizzleD1Database, data: {
+  taskId: number;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  fileData: string;
+  uploadedById: number;
+}) {
+  const result = await db.insert(taskAttachments).values(data).returning({ id: taskAttachments.id });
+  return { id: result[0].id };
+}
+
+export async function deleteAttachment(db: DrizzleD1Database, id: number) {
+  await db.delete(taskAttachments).where(eq(taskAttachments.id, id));
+}
+
+export async function deleteAttachmentsByTaskId(db: DrizzleD1Database, taskId: number) {
+  await db.delete(taskAttachments).where(eq(taskAttachments.taskId, taskId));
 }

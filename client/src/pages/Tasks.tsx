@@ -24,6 +24,8 @@ import {
   ArrowUp, ArrowRight, ArrowDown, Timer, Sparkles, Target, Search, X,
   MessageSquare, History, Send, LayoutGrid, Columns3, ChevronRight,
   UserCircle, FileText, Tag, Eye, CalendarDays, Users, Hash,
+  ListChecks, CheckSquare, Square, GripVertical, Paperclip, Upload,
+  Download, File, Image, FileSpreadsheet, FileArchive, Loader2,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { toast } from "sonner";
@@ -58,6 +60,11 @@ type TaskItem = {
   updatedAt: Date;
 };
 
+type ChecklistFormItem = {
+  id: string;
+  title: string;
+};
+
 type TaskForm = {
   title: string;
   description: string;
@@ -65,9 +72,35 @@ type TaskForm = {
   assigneeId: string;
   dueDate: string;
   status: TaskStatus;
+  checklistItems: ChecklistFormItem[];
 };
 
-const emptyForm: TaskForm = { title: "", description: "", priority: "medium", assigneeId: "", dueDate: "", status: "pending" };
+const emptyForm: TaskForm = { title: "", description: "", priority: "medium", assigneeId: "", dueDate: "", status: "pending", checklistItems: [] };
+
+// ==================== FILE HELPERS ====================
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+function getFileIcon(fileType: string) {
+  if (fileType.startsWith("image/")) return Image;
+  if (fileType.includes("spreadsheet") || fileType.includes("excel") || fileType.includes("csv")) return FileSpreadsheet;
+  if (fileType.includes("zip") || fileType.includes("rar") || fileType.includes("tar")) return FileArchive;
+  return File;
+}
+
+function fileToBase64(file: globalThis.File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 // ==================== CONFIG ====================
 const columnConfig: Record<TaskStatus, {
@@ -324,6 +357,343 @@ function DragOverlayCard({ task, allUsers }: { task: TaskItem; allUsers?: { id: 
   );
 }
 
+// ==================== TASK CHECKLIST SECTION ====================
+function TaskChecklistSection({ taskId }: { taskId: number }) {
+  const utils = trpc.useUtils();
+  const [newItemTitle, setNewItemTitle] = useState("");
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: checklist, isLoading } = trpc.tasks.checklist.useQuery({ taskId });
+
+  const addItemMutation = trpc.tasks.addChecklistItem.useMutation({
+    onSuccess: () => {
+      utils.tasks.checklist.invalidate({ taskId });
+      utils.tasks.activities.invalidate({ taskId });
+      setNewItemTitle("");
+      inputRef.current?.focus();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateItemMutation = trpc.tasks.updateChecklistItem.useMutation({
+    onSuccess: () => {
+      utils.tasks.checklist.invalidate({ taskId });
+      setEditingItemId(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteItemMutation = trpc.tasks.deleteChecklistItem.useMutation({
+    onSuccess: () => {
+      utils.tasks.checklist.invalidate({ taskId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleAddItem = () => {
+    if (!newItemTitle.trim()) return;
+    addItemMutation.mutate({ taskId, title: newItemTitle.trim() });
+  };
+
+  const handleToggle = (item: { id: number; isCompleted: number }) => {
+    updateItemMutation.mutate({ id: item.id, isCompleted: item.isCompleted ? 0 : 1 });
+  };
+
+  const handleStartEdit = (item: { id: number; title: string }) => {
+    setEditingItemId(item.id);
+    setEditingTitle(item.title);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTitle.trim() || !editingItemId) return;
+    updateItemMutation.mutate({ id: editingItemId, title: editingTitle.trim() });
+  };
+
+  const completedCount = checklist?.filter(i => i.isCompleted).length ?? 0;
+  const totalCount = checklist?.length ?? 0;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <ListChecks className="h-4 w-4 text-muted-foreground/40" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Checklist</span>
+          {totalCount > 0 && (
+            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+              {completedCount}/{totalCount}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <div className="mb-3">
+          <div className="h-2 bg-muted/20 rounded-full overflow-hidden border border-border/10">
+            <div
+              className="h-full bg-gradient-to-r from-primary to-primary/80 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-muted-foreground/40 mt-1 block">{progressPercent}% conclu\u00eddo</span>
+        </div>
+      )}
+
+      {/* Checklist items */}
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-10 rounded-lg" />)}</div>
+      ) : (
+        <div className="space-y-1.5">
+          {checklist?.map((item) => (
+            <div
+              key={item.id}
+              className={`group flex items-center gap-3 p-2.5 rounded-lg border transition-all duration-200 ${
+                item.isCompleted
+                  ? "bg-emerald-500/5 border-emerald-500/15"
+                  : "bg-muted/5 border-border/15 hover:bg-muted/10"
+              }`}
+            >
+              <button
+                onClick={() => handleToggle(item)}
+                className="shrink-0 transition-transform hover:scale-110"
+              >
+                {item.isCompleted ? (
+                  <CheckSquare className="h-5 w-5 text-emerald-500" />
+                ) : (
+                  <Square className="h-5 w-5 text-muted-foreground/40 hover:text-primary" />
+                )}
+              </button>
+              {editingItemId === item.id ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <Input
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveEdit(); if (e.key === "Escape") setEditingItemId(null); }}
+                    className="h-8 text-sm bg-muted/15 border-border/20"
+                    autoFocus
+                  />
+                  <Button size="sm" className="h-8 px-3 text-xs" onClick={handleSaveEdit}>Salvar</Button>
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setEditingItemId(null)}>Cancelar</Button>
+                </div>
+              ) : (
+                <span
+                  className={`flex-1 text-sm cursor-pointer ${
+                    item.isCompleted ? "line-through text-muted-foreground/40" : "text-foreground/80"
+                  }`}
+                  onDoubleClick={() => handleStartEdit(item)}
+                >
+                  {item.title}
+                </span>
+              )}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => handleStartEdit(item)}
+                  className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/20"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => deleteItemMutation.mutate({ id: item.id })}
+                  className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add new item */}
+      <div className="flex items-center gap-2 mt-2.5">
+        <Input
+          ref={inputRef}
+          value={newItemTitle}
+          onChange={(e) => setNewItemTitle(e.target.value)}
+          placeholder="Adicionar item ao checklist..."
+          className="h-9 text-sm bg-muted/10 border-border/15 flex-1"
+          onKeyDown={(e) => { if (e.key === "Enter") handleAddItem(); }}
+        />
+        <Button
+          size="sm"
+          className="h-9 px-4 text-xs font-semibold gap-1.5"
+          onClick={handleAddItem}
+          disabled={!newItemTitle.trim() || addItemMutation.isPending}
+        >
+          <Plus className="h-3.5 w-3.5" />Adicionar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ==================== TASK ATTACHMENTS SECTION ====================
+function TaskAttachmentsSection({ taskId }: { taskId: number }) {
+  const utils = trpc.useUtils();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const { data: attachments, isLoading } = trpc.tasks.attachments.useQuery({ taskId });
+
+  const addAttachmentMutation = trpc.tasks.addAttachment.useMutation({
+    onSuccess: () => {
+      utils.tasks.attachments.invalidate({ taskId });
+      utils.tasks.activities.invalidate({ taskId });
+      toast.success("Arquivo anexado!");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteAttachmentMutation = trpc.tasks.deleteAttachment.useMutation({
+    onSuccess: () => {
+      utils.tasks.attachments.invalidate({ taskId });
+      toast.success("Anexo removido!");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(`Arquivo "${file.name}" excede 5MB`);
+          continue;
+        }
+        const fileData = await fileToBase64(file);
+        await addAttachmentMutation.mutateAsync({
+          taskId,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          fileData,
+        });
+      }
+    } catch (err) {
+      toast.error("Erro ao enviar arquivo");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDownload = (attachment: { fileName: string; fileType: string; id: number }) => {
+    // Fetch the full attachment data to download
+    // We'll use a query to get the full data
+    const link = document.createElement("a");
+    // We need to fetch the attachment data
+    fetch(`/api/trpc/tasks.getAttachment?input=${encodeURIComponent(JSON.stringify({ json: { id: attachment.id } }))}`)
+      .then(res => res.json())
+      .then((data: any) => {
+        const fileData = data?.result?.data?.json?.fileData;
+        if (fileData) {
+          link.href = fileData;
+          link.download = attachment.fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      })
+      .catch(() => toast.error("Erro ao baixar arquivo"));
+  };
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Paperclip className="h-4 w-4 text-muted-foreground/40" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Anexos</span>
+          {attachments && attachments.length > 0 && (
+            <span className="text-[10px] font-bold text-muted-foreground/60 bg-muted/20 px-2 py-0.5 rounded-full">
+              {attachments.length}
+            </span>
+          )}
+        </div>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs gap-1.5 border-border/20"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" />Enviando...</>
+            ) : (
+              <><Upload className="h-3.5 w-3.5" />Anexar Arquivo</>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>
+      ) : attachments && attachments.length > 0 ? (
+        <div className="space-y-2">
+          {attachments.map((att) => {
+            const FileIcon = getFileIcon(att.fileType);
+            return (
+              <div
+                key={att.id}
+                className="group flex items-center gap-3 p-3 rounded-xl bg-muted/5 border border-border/15 hover:bg-muted/10 transition-all"
+              >
+                <div className="h-10 w-10 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
+                  <FileIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{att.fileName}</p>
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
+                    <span>{formatFileSize(att.fileSize)}</span>
+                    <span>\u00b7</span>
+                    <span>{att.uploaderName ?? "Usu\u00e1rio"}</span>
+                    <span>\u00b7</span>
+                    <span>{new Date(att.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleDownload(att)}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteAttachmentMutation.mutate({ id: att.id })}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/25 border border-dashed border-border/20 rounded-xl">
+          <Paperclip className="h-8 w-8 mb-2" />
+          <span className="text-xs font-medium">Nenhum anexo</span>
+          <span className="text-[10px] mt-0.5">Clique em "Anexar Arquivo" para adicionar</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==================== TASK DETAIL PANEL ====================
 function TaskDetailPanel({
   task,
@@ -553,6 +923,12 @@ function TaskDetailPanel({
               </div>
             </div>
           )}
+
+          {/* Checklist Section */}
+          <TaskChecklistSection taskId={task.id} />
+
+          {/* Attachments Section */}
+          <TaskAttachmentsSection taskId={task.id} />
 
           <Separator className="mb-5 bg-border/15" />
 
@@ -938,7 +1314,7 @@ export default function Tasks() {
   });
 
   const handleSubmit = () => {
-    if (!form.title.trim()) { toast.error("Título é obrigatório"); return; }
+    if (!form.title.trim()) { toast.error("T\u00edtulo \u00e9 obrigat\u00f3rio"); return; }
     const payload = {
       title: form.title,
       description: form.description || undefined,
@@ -946,8 +1322,17 @@ export default function Tasks() {
       assigneeId: form.assigneeId ? parseInt(form.assigneeId) : undefined,
       dueDate: form.dueDate ? new Date(form.dueDate).getTime() : undefined,
     };
-    if (editingTask) updateMutation.mutate({ id: editingTask, ...payload });
-    else createMutation.mutate(payload);
+    if (editingTask) {
+      updateMutation.mutate({ id: editingTask, ...payload });
+    } else {
+      const checklistPayload = form.checklistItems
+        .filter(item => item.title.trim())
+        .map(item => ({ title: item.title.trim() }));
+      createMutation.mutate({
+        ...payload,
+        checklistItems: checklistPayload.length > 0 ? checklistPayload : undefined,
+      });
+    }
   };
 
   const openEdit = (task: TaskItem) => {
@@ -957,12 +1342,35 @@ export default function Tasks() {
       assigneeId: task.assigneeId?.toString() ?? "",
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
       status: task.status,
+      checklistItems: [],
     });
     setSelectedTask(null);
     setDialogOpen(true);
   };
 
   const openCreate = () => { setEditingTask(null); setForm(emptyForm); setDialogOpen(true); };
+
+  // Checklist form helpers
+  const addChecklistFormItem = () => {
+    setForm(prev => ({
+      ...prev,
+      checklistItems: [...prev.checklistItems, { id: crypto.randomUUID(), title: "" }],
+    }));
+  };
+
+  const updateChecklistFormItem = (id: string, title: string) => {
+    setForm(prev => ({
+      ...prev,
+      checklistItems: prev.checklistItems.map(item => item.id === id ? { ...item, title } : item),
+    }));
+  };
+
+  const removeChecklistFormItem = (id: string) => {
+    setForm(prev => ({
+      ...prev,
+      checklistItems: prev.checklistItems.filter(item => item.id !== id),
+    }));
+  };
 
   const reorderMutation = trpc.tasks.reorder.useMutation({
     onError: (err) => {
@@ -1408,6 +1816,67 @@ export default function Tasks() {
                 className="bg-muted/15 border-border/20 h-12 w-full sm:w-1/2"
               />
             </div>
+
+            {/* Checklist - only on create */}
+            {!editingTask && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />Checklist
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs gap-1.5 border-border/20"
+                    onClick={addChecklistFormItem}
+                  >
+                    <Plus className="h-3.5 w-3.5" />Adicionar Item
+                  </Button>
+                </div>
+                {form.checklistItems.length > 0 ? (
+                  <div className="space-y-2 p-4 rounded-xl bg-muted/5 border border-border/15">
+                    {form.checklistItems.map((item, index) => (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded flex items-center justify-center bg-muted/20 text-muted-foreground/50 shrink-0">
+                          <span className="text-[10px] font-bold">{index + 1}</span>
+                        </div>
+                        <Input
+                          value={item.title}
+                          onChange={(e) => updateChecklistFormItem(item.id, e.target.value)}
+                          placeholder={`Item ${index + 1} do checklist...`}
+                          className="h-10 text-sm bg-muted/10 border-border/15 flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addChecklistFormItem();
+                            }
+                          }}
+                          autoFocus={index === form.checklistItems.length - 1}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeChecklistFormItem(item.id)}
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-muted-foreground/40 mt-1">Pressione Enter para adicionar mais itens</p>
+                  </div>
+                ) : (
+                  <div
+                    className="flex flex-col items-center justify-center py-6 border border-dashed border-border/20 rounded-xl text-muted-foreground/30 cursor-pointer hover:bg-muted/5 hover:border-border/30 transition-all"
+                    onClick={addChecklistFormItem}
+                  >
+                    <ListChecks className="h-8 w-8 mb-2" />
+                    <span className="text-xs font-medium">Nenhum item no checklist</span>
+                    <span className="text-[10px] mt-0.5">Clique para adicionar itens</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-3 pt-2">

@@ -10,6 +10,10 @@ import {
   getUserById, createComment, getCommentsByTaskId, deleteComment,
   getTaskActivities, getCollaboratorsWithStats,
   sendChatMessage, getChatMessages, updateUser,
+  getChecklistByTaskId, createChecklistItem, createChecklistItems,
+  updateChecklistItem, deleteChecklistItem, deleteChecklistByTaskId,
+  getAttachmentsByTaskId, getAttachmentById, createAttachment,
+  deleteAttachment, deleteAttachmentsByTaskId,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -138,18 +142,29 @@ export const appRouter = router({
         priority: z.enum(["low", "medium", "high", "urgent"]),
         assigneeId: z.number().optional(),
         dueDate: z.number().optional(),
+        checklistItems: z.array(z.object({
+          title: z.string().min(1).max(500),
+        })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const { checklistItems: items, ...taskData } = input;
         const result = await createTask(ctx.db, {
-          ...input,
+          ...taskData,
           createdById: ctx.user.id,
         });
+        // Create checklist items if provided
+        if (items && items.length > 0) {
+          await createChecklistItems(ctx.db, result.id, items.map((item, index) => ({
+            title: item.title,
+            sortOrder: index,
+          })));
+        }
         await logActivity(ctx.db, {
           userId: ctx.user.id,
           action: "created",
           entityType: "task",
           entityId: result.id,
-          details: `Criou a tarefa "${input.title}"`,
+          details: `Criou a tarefa "${input.title}"${items && items.length > 0 ? ` com ${items.length} itens de checklist` : ""}`,
         });
         return result;
       }),
@@ -318,6 +333,106 @@ export const appRouter = router({
       .input(z.object({ orderedIds: z.array(z.number()) }))
       .mutation(async ({ ctx, input }) => {
         await reorderTasks(ctx.db, input.orderedIds);
+        return { success: true };
+      }),
+
+    // ===== CHECKLIST =====
+    checklist: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getChecklistByTaskId(ctx.db, input.taskId);
+      }),
+
+    addChecklistItem: protectedProcedure
+      .input(z.object({
+        taskId: z.number(),
+        title: z.string().min(1).max(500),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await createChecklistItem(ctx.db, {
+          taskId: input.taskId,
+          title: input.title,
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "checklist_added",
+          entityType: "task",
+          entityId: input.taskId,
+          details: `Adicionou item ao checklist: "${input.title}"`,
+        });
+        return result;
+      }),
+
+    updateChecklistItem: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().min(1).max(500).optional(),
+        isCompleted: z.number().min(0).max(1).optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        await updateChecklistItem(ctx.db, id, data);
+        return { success: true };
+      }),
+
+    deleteChecklistItem: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteChecklistItem(ctx.db, input.id);
+        return { success: true };
+      }),
+
+    // ===== ATTACHMENTS =====
+    attachments: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getAttachmentsByTaskId(ctx.db, input.taskId);
+      }),
+
+    addAttachment: protectedProcedure
+      .input(z.object({
+        taskId: z.number(),
+        fileName: z.string().min(1).max(255),
+        fileSize: z.number(),
+        fileType: z.string(),
+        fileData: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await createAttachment(ctx.db, {
+          ...input,
+          uploadedById: ctx.user.id,
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "attachment_added",
+          entityType: "task",
+          entityId: input.taskId,
+          details: `Anexou arquivo: "${input.fileName}"`,
+        });
+        return result;
+      }),
+
+    getAttachment: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getAttachmentById(ctx.db, input.id);
+      }),
+
+    deleteAttachment: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const attachment = await getAttachmentById(ctx.db, input.id);
+        await deleteAttachment(ctx.db, input.id);
+        if (attachment) {
+          await logActivity(ctx.db, {
+            userId: ctx.user.id,
+            action: "attachment_deleted",
+            entityType: "task",
+            entityId: attachment.taskId,
+            details: `Removeu anexo: "${attachment.fileName}"`,
+          });
+        }
         return { success: true };
       }),
   }),

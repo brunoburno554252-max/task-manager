@@ -102,3 +102,30 @@ export const chatMessages = sqliteTable("chat_messages", {
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
+
+export const checklistItems = sqliteTable("checklist_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("taskId").notNull(),
+  title: text("title").notNull(),
+  isCompleted: integer("isCompleted").default(0).notNull(),
+  sortOrder: integer("sortOrder").default(0).notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type ChecklistItem = typeof checklistItems.$inferSelect;
+export type InsertChecklistItem = typeof checklistItems.$inferInsert;
+
+export const taskAttachments = sqliteTable("task_attachments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("taskId").notNull(),
+  fileName: text("fileName").notNull(),
+  fileSize: integer("fileSize").default(0).notNull(),
+  fileType: text("fileType").default("").notNull(),
+  fileData: text("fileData").notNull(),
+  uploadedById: integer("uploadedById").notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type TaskAttachment = typeof taskAttachments.$inferSelect;
+export type InsertTaskAttachment = typeof taskAttachments.$inferInsert;
