@@ -14,6 +14,7 @@ import {
 import {
   Users, Search, CheckCircle2, Clock, AlertCircle, ListTodo,
   TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil, UserPlus, Loader2,
+  X, UserMinus,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
@@ -30,19 +31,26 @@ export default function Collaborators() {
   const [editUser, setEditUser] = useState<{ id: number; name: string; email: string; phone: string; role: string } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "user" });
 
-  // Quando dentro de empresa, usar stats filtradas por empresa
+  // Dialog para adicionar membro à empresa
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+
+  // Quando dentro de empresa, usar membros vinculados
   const { data: allCollaborators, isLoading: isLoadingAll } = trpc.collaborators.listWithStats.useQuery(undefined, { enabled: !companyId });
   const { data: companyCollaborators, isLoading: isLoadingCompany } = trpc.collaborators.listWithStatsByCompany.useQuery(
     { companyId: companyId! },
     { enabled: !!companyId }
   );
 
+  // Lista de todos os usuários para o dialog de adicionar membro
+  const { data: allUsers } = trpc.users.list.useQuery(undefined, { enabled: !!companyId && showAddMember });
+
   const collaborators = companyId ? companyCollaborators : allCollaborators;
   const isLoading = companyId ? isLoadingCompany : isLoadingAll;
 
   const utils = trpc.useUtils();
 
-  // Registration dialog (only for non-company view)
+  // Registration dialog (only for non-company view / Cadastros page)
   const [showRegister, setShowRegister] = useState(false);
   const [regForm, setRegForm] = useState({ name: "", email: "", password: "", phone: "", role: "user" as "user" | "admin" });
   const createUserMutation = trpc.users.create.useMutation({
@@ -54,6 +62,25 @@ export default function Collaborators() {
       setRegForm({ name: "", email: "", password: "", phone: "", role: "user" });
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  // Mutations para adicionar/remover membros da empresa
+  const addMemberMutation = trpc.companies.addMember.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador adicionado à empresa!");
+      utils.collaborators.listWithStatsByCompany.invalidate();
+      utils.companies.listWithStats.invalidate();
+    },
+    onError: () => toast.error("Erro ao adicionar colaborador"),
+  });
+
+  const removeMemberMutation = trpc.companies.removeMember.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador removido da empresa!");
+      utils.collaborators.listWithStatsByCompany.invalidate();
+      utils.companies.listWithStats.invalidate();
+    },
+    onError: () => toast.error("Erro ao remover colaborador"),
   });
 
   const updateUserMutation = trpc.users.update.useMutation({
@@ -89,6 +116,14 @@ export default function Collaborators() {
     });
   };
 
+  const handleRemoveMember = (userId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!companyId) return;
+    if (confirm("Tem certeza que deseja remover este colaborador da empresa?")) {
+      removeMemberMutation.mutate({ companyId, userId });
+    }
+  };
+
   const formatPhone = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 13);
     if (digits.length <= 2) return `+${digits}`;
@@ -106,6 +141,21 @@ export default function Collaborators() {
       (c.email?.toLowerCase().includes(q))
     );
   }, [collaborators, search]);
+
+  // Usuários disponíveis para adicionar (que ainda não são membros)
+  const availableUsers = useMemo(() => {
+    if (!allUsers || !companyCollaborators) return [];
+    const memberIds = new Set(companyCollaborators.map(c => c.id));
+    let available = allUsers.filter(u => !memberIds.has(u.id));
+    if (memberSearch.trim()) {
+      const q = memberSearch.toLowerCase();
+      available = available.filter(u =>
+        (u.name?.toLowerCase().includes(q)) ||
+        (u.email?.toLowerCase().includes(q))
+      );
+    }
+    return available;
+  }, [allUsers, companyCollaborators, memberSearch]);
 
   const totalStats = useMemo(() => {
     if (!collaborators) return { pending: 0, inProgress: 0, completed: 0, total: 0 };
@@ -158,17 +208,84 @@ export default function Collaborators() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{company ? company.name : "Colaboradores"}</h1>
             <p className="text-sm text-muted-foreground">
-              {collaborators?.length ?? 0} colaboradores
+              {collaborators?.length ?? 0} colaboradores {companyId ? "vinculados" : ""}
             </p>
           </div>
         </div>
-        {/* Só mostra botão Cadastrar fora do contexto de empresa (na página Cadastros) */}
-        {!companyId && user?.role === "admin" && (
-          <Button onClick={() => setShowRegister(true)} className="gap-2">
-            <UserPlus className="h-4 w-4" /> Cadastrar
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Dentro de empresa: botão para adicionar colaborador existente */}
+          {companyId && user?.role === "admin" && (
+            <Button onClick={() => { setShowAddMember(true); setMemberSearch(""); }} className="gap-2">
+              <UserPlus className="h-4 w-4" /> Adicionar Colaborador
+            </Button>
+          )}
+          {/* Fora de empresa (Cadastros): botão para cadastrar novo */}
+          {!companyId && user?.role === "admin" && (
+            <Button onClick={() => setShowRegister(true)} className="gap-2">
+              <UserPlus className="h-4 w-4" /> Cadastrar
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Dialog para adicionar membro à empresa */}
+      {companyId && (
+        <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Adicionar Colaborador</DialogTitle>
+              <DialogDescription>Selecione um colaborador para vincular à empresa <strong>{company?.name}</strong>.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou email..."
+                  value={memberSearch}
+                  onChange={e => setMemberSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="max-h-[300px] overflow-y-auto space-y-1">
+                {availableUsers.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    {memberSearch ? "Nenhum colaborador encontrado" : "Todos os colaboradores já estão vinculados"}
+                  </div>
+                ) : (
+                  availableUsers.map(u => {
+                    const initials = (u.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                    return (
+                      <div
+                        key={u.id}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-primary/20"
+                        onClick={() => {
+                          addMemberMutation.mutate({ companyId, userId: u.id });
+                        }}
+                      >
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{u.name || "Sem nome"}</p>
+                          <p className="text-xs text-muted-foreground truncate">{u.email || "-"}</p>
+                        </div>
+                        {u.role === "admin" && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 shrink-0">
+                            Admin
+                          </Badge>
+                        )}
+                        <UserPlus className="h-4 w-4 text-primary shrink-0" />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Register Dialog - só fora do contexto de empresa */}
       {!companyId && (
@@ -318,6 +435,16 @@ export default function Collaborators() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  {/* Botão remover da empresa */}
+                  {companyId && user?.role === "admin" && (
+                    <button
+                      onClick={(e) => handleRemoveMember(collab.id, e)}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Remover da empresa"
+                    >
+                      <UserMinus className="h-3 w-3 text-red-500" />
+                    </button>
+                  )}
                   {user?.role === "admin" && !companyId && (
                     <button
                       onClick={(e) => handleEdit(collab, e)}
@@ -380,7 +507,7 @@ export default function Collaborators() {
         <div className="text-center py-16">
           <Users className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-muted-foreground">
-            {search ? "Nenhum colaborador encontrado" : "Nenhum colaborador cadastrado"}
+            {search ? "Nenhum colaborador encontrado" : companyId ? "Nenhum colaborador vinculado a esta empresa. Clique em \"Adicionar Colaborador\" para vincular." : "Nenhum colaborador cadastrado"}
           </p>
         </div>
       )}

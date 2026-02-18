@@ -4,7 +4,7 @@ import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
-  checklistItems, taskAttachments, companies,
+  checklistItems, taskAttachments, companies, companyMembers,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -663,7 +663,70 @@ export async function getCompaniesWithStats(db: DrizzleD1Database) {
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'completed')`,
-    collaboratorCount: sql<number>`(SELECT COUNT(DISTINCT tasks.assigneeId) FROM tasks WHERE tasks.companyId = companies.id AND tasks.assigneeId IS NOT NULL)`,
+    collaboratorCount: sql<number>`(SELECT COUNT(*) FROM company_members WHERE company_members.companyId = companies.id)`,
   }).from(companies).orderBy(asc(companies.name));
+  return result;
+}
+
+// ============ COMPANY MEMBERS ============
+
+export async function getCompanyMembers(db: DrizzleD1Database, companyId: number) {
+  return db.select({
+    id: companyMembers.id,
+    companyId: companyMembers.companyId,
+    userId: companyMembers.userId,
+    createdAt: companyMembers.createdAt,
+    userName: users.name,
+    userEmail: users.email,
+    userPhone: users.phone,
+    userRole: users.role,
+    userTotalPoints: users.totalPoints,
+  }).from(companyMembers)
+    .leftJoin(users, eq(companyMembers.userId, users.id))
+    .where(eq(companyMembers.companyId, companyId))
+    .orderBy(asc(users.name));
+}
+
+export async function addCompanyMember(db: DrizzleD1Database, companyId: number, userId: number) {
+  // Verificar se já existe
+  const existing = await db.select().from(companyMembers)
+    .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)))
+    .limit(1);
+  if (existing.length > 0) return existing[0];
+  
+  const result = await db.insert(companyMembers).values({ companyId, userId }).returning();
+  return result[0];
+}
+
+export async function removeCompanyMember(db: DrizzleD1Database, companyId: number, userId: number) {
+  await db.delete(companyMembers)
+    .where(and(eq(companyMembers.companyId, companyId), eq(companyMembers.userId, userId)));
+}
+
+export async function getCompanyMemberIds(db: DrizzleD1Database, companyId: number): Promise<number[]> {
+  const members = await db.select({ userId: companyMembers.userId })
+    .from(companyMembers)
+    .where(eq(companyMembers.companyId, companyId));
+  return members.map(m => m.userId);
+}
+
+// Atualizar getCollaboratorsWithStatsByCompany para mostrar apenas membros vinculados
+export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, companyId: number) {
+  const result = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    phone: users.phone,
+    role: users.role,
+    totalPoints: users.totalPoints,
+    createdAt: users.createdAt,
+    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
+    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId})`,
+  }).from(users)
+    .innerJoin(companyMembers, and(eq(companyMembers.userId, users.id), eq(companyMembers.companyId, companyId)))
+    .orderBy(desc(users.totalPoints));
+
   return result;
 }

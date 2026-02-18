@@ -15,6 +15,7 @@ import {
   getAttachmentsByTaskId, getAttachmentById, createAttachment,
   deleteAttachment, deleteAttachmentsByTaskId,
   getAllCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, getCompaniesWithStats,
+  getCompanyMembers, addCompanyMember, removeCompanyMember, getCompanyCollaboratorsWithStats,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -532,7 +533,7 @@ export const appRouter = router({
     listWithStatsByCompany: protectedProcedure
       .input(z.object({ companyId: z.number() }))
       .query(async ({ ctx, input }) => {
-        return getCollaboratorsWithStatsByCompany(ctx.db, input.companyId);
+        return getCompanyCollaboratorsWithStats(ctx.db, input.companyId);
       }),
   }),
 
@@ -610,6 +611,38 @@ export const appRouter = router({
           entityType: "company",
           entityId: input.id,
           details: `Excluiu a empresa #${input.id}`,
+        });
+        return { success: true };
+      }),
+    // Company Members
+    members: protectedProcedure
+      .input(z.object({ companyId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getCompanyMembers(ctx.db, input.companyId);
+      }),
+    addMember: adminProcedure
+      .input(z.object({ companyId: z.number(), userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await addCompanyMember(ctx.db, input.companyId, input.userId);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "created",
+          entityType: "company_member",
+          entityId: input.companyId,
+          details: `Adicionou colaborador #${input.userId} à empresa #${input.companyId}`,
+        });
+        return result;
+      }),
+    removeMember: adminProcedure
+      .input(z.object({ companyId: z.number(), userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await removeCompanyMember(ctx.db, input.companyId, input.userId);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "deleted",
+          entityType: "company_member",
+          entityId: input.companyId,
+          details: `Removeu colaborador #${input.userId} da empresa #${input.companyId}`,
         });
         return { success: true };
       }),
