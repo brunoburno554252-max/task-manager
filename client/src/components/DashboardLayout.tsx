@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  LayoutDashboard, Columns3, Trophy, Award,
+  LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +36,7 @@ import { Badge } from "./ui/badge";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Columns3, label: "Colaboradores", path: "/kanban" },
+  { icon: Building2, label: "Colaboradores", path: "/kanban" },
   { icon: Zap, label: "Minhas Tarefas", path: "/kanban/me", dynamic: true },
   { icon: Users, label: "Cadastros", path: "/collaborators", adminOnly: true },
   { icon: Trophy, label: "Ranking", path: "/ranking" },

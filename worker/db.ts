@@ -4,7 +4,7 @@ import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
-  checklistItems, taskAttachments,
+  checklistItems, taskAttachments, companies,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -105,6 +105,7 @@ export async function createTask(db: DrizzleD1Database, data: {
   assigneeId?: number;
   createdById: number;
   dueDate?: number;
+  companyId?: number;
 }) {
   const now = new Date().toISOString();
   const result = await db.insert(tasks).values({
@@ -115,6 +116,7 @@ export async function createTask(db: DrizzleD1Database, data: {
     assigneeId: data.assigneeId ?? null,
     createdById: data.createdById,
     dueDate: data.dueDate ?? null,
+    companyId: data.companyId ?? null,
     pointsAwarded: 0,
     createdAt: now,
     updatedAt: now,
@@ -131,6 +133,7 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
   status?: string;
   priority?: string;
   assigneeId?: number;
+  companyId?: number;
   search?: string;
   limit?: number;
   offset?: number;
@@ -144,6 +147,9 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
   }
   if (filters?.assigneeId) {
     conditions.push(eq(tasks.assigneeId, filters.assigneeId));
+  }
+  if (filters?.companyId) {
+    conditions.push(eq(tasks.companyId as any, filters.companyId));
   }
   if (filters?.search) {
     conditions.push(
@@ -584,4 +590,61 @@ export async function deleteAttachment(db: DrizzleD1Database, id: number) {
 
 export async function deleteAttachmentsByTaskId(db: DrizzleD1Database, taskId: number) {
   await db.delete(taskAttachments).where(eq(taskAttachments.taskId, taskId));
+}
+
+// ============ COMPANIES ============
+
+export async function getAllCompanies(db: DrizzleD1Database) {
+  return db.select().from(companies).orderBy(asc(companies.name));
+}
+
+export async function getCompanyById(db: DrizzleD1Database, id: number) {
+  const result = await db.select().from(companies).where(eq(companies.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createCompany(db: DrizzleD1Database, data: {
+  name: string;
+  description?: string;
+  color?: string;
+}) {
+  const now = new Date().toISOString();
+  const result = await db.insert(companies).values({
+    name: data.name,
+    description: data.description ?? null,
+    color: data.color ?? "#6366f1",
+    createdAt: now,
+    updatedAt: now,
+  }).returning({ id: companies.id });
+  return { id: result[0].id };
+}
+
+export async function updateCompany(db: DrizzleD1Database, id: number, data: Partial<{
+  name: string;
+  description: string | null;
+  color: string;
+}>) {
+  await db.update(companies).set({ ...data, updatedAt: new Date().toISOString() }).where(eq(companies.id, id));
+}
+
+export async function deleteCompany(db: DrizzleD1Database, id: number) {
+  // Set tasks companyId to null before deleting
+  await db.update(tasks).set({ companyId: null } as any).where(eq(tasks.companyId as any, id));
+  await db.delete(companies).where(eq(companies.id, id));
+}
+
+export async function getCompaniesWithStats(db: DrizzleD1Database) {
+  const result = await db.select({
+    id: companies.id,
+    name: companies.name,
+    description: companies.description,
+    color: companies.color,
+    createdAt: companies.createdAt,
+    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id)`,
+    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'completed')`,
+    collaboratorCount: sql<number>`(SELECT COUNT(DISTINCT tasks.assigneeId) FROM tasks WHERE tasks.companyId = companies.id AND tasks.assigneeId IS NOT NULL)`,
+  }).from(companies).orderBy(asc(companies.name));
+  return result;
 }

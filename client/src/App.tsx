@@ -18,6 +18,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Chat = lazy(() => import("./pages/Chat"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
+const Companies = lazy(() => import("./pages/Companies"));
 
 function PageLoader() {
   return (
@@ -36,7 +37,9 @@ function Router() {
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path={"/"} component={Home} />
-          <Route path={"/kanban"} component={Collaborators} />
+          <Route path={"/kanban"} component={Companies} />
+          <Route path={"/company/:companyId"} component={Collaborators} />
+          <Route path={"/company/:companyId/kanban/:userId"} component={CollaboratorKanban} />
           <Route path={"/collaborators"} component={Cadastros} />
           <Route path={"/kanban/:userId"} component={CollaboratorKanban} />
           <Route path={"/ranking"} component={Ranking} />

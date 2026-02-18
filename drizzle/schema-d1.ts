@@ -30,6 +30,7 @@ export const tasks = sqliteTable("tasks", {
   completedAt: integer("completedAt"),
   pointsAwarded: integer("pointsAwarded").default(0).notNull(),
   sortOrder: integer("sortOrder").default(0).notNull(),
+  companyId: integer("companyId"),
   createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
 });
@@ -129,3 +130,15 @@ export const taskAttachments = sqliteTable("task_attachments", {
 
 export type TaskAttachment = typeof taskAttachments.$inferSelect;
 export type InsertTaskAttachment = typeof taskAttachments.$inferInsert;
+
+export const companies = sqliteTable("companies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  color: text("color").default("#6366f1").notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;

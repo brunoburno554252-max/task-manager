@@ -278,9 +278,11 @@ function SimpleTaskCard({ task, onClick, onStatusChange }: {
 // ==================== MAIN COMPONENT ====================
 export default function CollaboratorKanban() {
   const { user } = useAuth();
-  const params = useParams<{ userId: string }>();
+  const params = useParams<{ userId: string; companyId?: string }>();
   const userId = parseInt(params.userId || "0", 10);
+  const companyId = params.companyId ? parseInt(params.companyId) : undefined;
   const [, setLocation] = useLocation();
+  const { data: company } = trpc.companies.getById.useQuery({ id: companyId! }, { enabled: !!companyId });
 
   const [viewMode, setViewMode] = useState<ViewMode>("simple");
   const [agendaDate, setAgendaDate] = useState(new Date());
@@ -316,7 +318,7 @@ export default function CollaboratorKanban() {
 
   // Data
   const { data: collabUser } = trpc.users.getById.useQuery({ id: userId });
-  const { data: allTasks, isLoading } = trpc.tasks.list.useQuery({ assigneeId: userId });
+  const { data: allTasks, isLoading } = trpc.tasks.list.useQuery({ assigneeId: userId, companyId });
   const { data: allUsers } = trpc.users.list.useQuery();
   const utils = trpc.useUtils();
 
@@ -358,8 +360,8 @@ export default function CollaboratorKanban() {
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ["#10b981", "#34d399", "#6ee7b7", "#a78bfa", "#818cf8"] });
       }
       await utils.tasks.list.cancel();
-      const prev = utils.tasks.list.getData({ assigneeId: userId });
-      utils.tasks.list.setData({ assigneeId: userId }, (old: any) => {
+      const prev = utils.tasks.list.getData({ assigneeId: userId, companyId });
+      utils.tasks.list.setData({ assigneeId: userId, companyId }, (old: any) => {
         if (!old) return old;
         const tasks = old.tasks ?? old;
         const updated = (Array.isArray(tasks) ? tasks : []).map((t: any) =>
@@ -370,7 +372,7 @@ export default function CollaboratorKanban() {
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) utils.tasks.list.setData({ assigneeId: userId }, ctx.prev as any);
+      if (ctx?.prev) utils.tasks.list.setData({ assigneeId: userId, companyId }, ctx.prev as any);
       toast.error("Erro ao atualizar status");
     },
     onSettled: () => {
@@ -1056,7 +1058,7 @@ export default function CollaboratorKanban() {
     <div className="space-y-5">
       {/* Back + User Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setLocation("/kanban")}>
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setLocation(companyId ? `/company/${companyId}` : "/kanban")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Avatar className="h-12 w-12 border-2 border-primary/20">
@@ -1069,7 +1071,14 @@ export default function CollaboratorKanban() {
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0">Admin</Badge>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">{collabUser?.email || ""}</p>
+          <p className="text-sm text-muted-foreground">
+            {collabUser?.email || ""}
+            {company && (
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium text-white" style={{ backgroundColor: company.color }}>
+                {company.name}
+              </span>
+            )}
+          </p>
         </div>
         <div className="hidden md:flex items-center gap-3">
           {statusOrder.map(s => {
@@ -1645,6 +1654,7 @@ export default function CollaboratorKanban() {
                 priority: newPriority,
                 assigneeId: userId,
                 dueDate: newDueDate ? new Date(newDueDate).getTime() : undefined,
+                companyId: companyId || undefined,
                 checklistItems: newChecklistItems.length > 0 ? newChecklistItems.map((t, i) => ({ title: t, sortOrder: i })) : undefined,
               }, {
                 onSuccess: (result: any) => {

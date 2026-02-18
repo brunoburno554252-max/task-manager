@@ -16,12 +16,16 @@ import {
   TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil, UserPlus, Loader2,
 } from "lucide-react";
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
+import { Building2, ArrowLeft } from "lucide-react";
 
 export default function Collaborators() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const params = useParams<{ companyId?: string }>();
+  const companyId = params.companyId ? parseInt(params.companyId) : undefined;
+  const { data: company } = trpc.companies.getById.useQuery({ id: companyId! }, { enabled: !!companyId });
   const [search, setSearch] = useState("");
   const [editUser, setEditUser] = useState<{ id: number; name: string; email: string; phone: string; role: string } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "user" });
@@ -129,13 +133,22 @@ export default function Collaborators() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center">
-            <Users className="h-5 w-5 text-primary" />
+          {companyId && (
+            <button onClick={() => setLocation("/kanban")} className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={company ? { backgroundColor: company.color } : undefined} >
+            {company ? (
+              <Building2 className="h-5 w-5 text-white" />
+            ) : (
+              <Users className="h-5 w-5 text-primary" />
+            )}
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Colaboradores</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{company ? company.name : "Colaboradores"}</h1>
             <p className="text-sm text-muted-foreground">
-              {collaborators?.length ?? 0} colaboradores cadastrados
+              {company ? `${collaborators?.length ?? 0} colaboradores` : `${collaborators?.length ?? 0} colaboradores cadastrados`}
             </p>
           </div>
         </div>
@@ -254,6 +267,7 @@ export default function Collaborators() {
               key={collab.id}
               onClick={() => setLocation(`/kanban/${collab.id}`)}
               className="group relative rounded-xl bg-card/80 border border-border/30 p-5 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
+              onClick={() => setLocation(companyId ? `/company/${companyId}/kanban/${collab.id}` : `/kanban/${collab.id}`)}
             >
               {/* Rank indicator for top 3 */}
               {index < 3 && (

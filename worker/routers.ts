@@ -14,6 +14,7 @@ import {
   updateChecklistItem, deleteChecklistItem, deleteChecklistByTaskId,
   getAttachmentsByTaskId, getAttachmentById, createAttachment,
   deleteAttachment, deleteAttachmentsByTaskId,
+  getAllCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, getCompaniesWithStats,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -142,6 +143,7 @@ export const appRouter = router({
         priority: z.enum(["low", "medium", "high", "urgent"]),
         assigneeId: z.number().optional(),
         dueDate: z.number().optional(),
+        companyId: z.number().optional(),
         checklistItems: z.array(z.object({
           title: z.string().min(1).max(500),
         })).optional(),
@@ -174,6 +176,7 @@ export const appRouter = router({
         status: z.string().optional(),
         priority: z.string().optional(),
         assigneeId: z.number().optional(),
+        companyId: z.number().optional(),
         search: z.string().optional(),
         limit: z.number().optional(),
         offset: z.number().optional(),
@@ -523,6 +526,69 @@ export const appRouter = router({
       .input(z.object({ content: z.string().min(1).max(5000) }))
       .mutation(async ({ ctx, input }) => {
         return sendChatMessage(ctx.db, ctx.user.id, input.content);
+      }),
+  }),
+
+  companies: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getAllCompanies(ctx.db);
+    }),
+    listWithStats: protectedProcedure.query(async ({ ctx }) => {
+      return getCompaniesWithStats(ctx.db);
+    }),
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getCompanyById(ctx.db, input.id);
+      }),
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().max(1000).optional(),
+        color: z.string().max(20).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await createCompany(ctx.db, input);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "created",
+          entityType: "company",
+          entityId: result.id,
+          details: `Criou a empresa "${input.name}"`,
+        });
+        return result;
+      }),
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().max(1000).optional().nullable(),
+        color: z.string().max(20).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        await updateCompany(ctx.db, id, data as any);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "updated",
+          entityType: "company",
+          entityId: id,
+          details: `Atualizou a empresa #${id}`,
+        });
+        return { success: true };
+      }),
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteCompany(ctx.db, input.id);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "deleted",
+          entityType: "company",
+          entityId: input.id,
+          details: `Excluiu a empresa #${input.id}`,
+        });
+        return { success: true };
       }),
   }),
 });
