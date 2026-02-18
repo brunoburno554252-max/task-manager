@@ -300,6 +300,7 @@ export default function CollaboratorKanban() {
   const [newDueDate, setNewDueDate] = useState("");
   const [newChecklistItems, setNewChecklistItems] = useState<string[]>([]);
   const [newChecklistInput, setNewChecklistInput] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<{file: globalThis.File; preview?: string}[]>([]);
 
   // Checklist inline add state (detail panel)
   const [inlineChecklistInput, setInlineChecklistInput] = useState("");
@@ -341,6 +342,7 @@ export default function CollaboratorKanban() {
       setShowCreateDialog(false);
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewDueDate("");
       setNewChecklistItems([]); setNewChecklistInput("");
+      setPendingAttachments([]);
       toast.success("Tarefa criada com sucesso!");
     },
     onError: (err) => toast.error(err.message),
@@ -1270,7 +1272,7 @@ export default function CollaboratorKanban() {
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-lg bg-card border-border/30">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-card border-border/30">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-primary" />
@@ -1359,9 +1361,82 @@ export default function CollaboratorKanban() {
                 </Button>
               </div>
             </div>
+
+            {/* Anexos na criação */}
+            <div>
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" /> Anexos
+                {pendingAttachments.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground font-normal">({pendingAttachments.length} arquivo{pendingAttachments.length > 1 ? 's' : ''})</span>
+                )}
+              </Label>
+              <div className="mt-2 space-y-1.5">
+                {pendingAttachments.map((att, idx) => {
+                  const FIcon = getFileIcon(att.file.type);
+                  return (
+                    <div key={idx} className="flex items-center gap-2.5 rounded-lg bg-muted/10 px-2.5 py-2 group">
+                      {att.preview ? (
+                        <img src={att.preview} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0" />
+                      ) : (
+                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <FIcon className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{att.file.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{formatFileSize(att.file.size)}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive shrink-0"
+                        onClick={() => {
+                          if (att.preview) URL.revokeObjectURL(att.preview);
+                          setPendingAttachments(prev => prev.filter((_, i) => i !== idx));
+                        }}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+              <label className="cursor-pointer mt-2 block">
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+                  onChange={e => {
+                    const files = e.target.files;
+                    if (!files) return;
+                    const maxSize = 5 * 1024 * 1024;
+                    const newFiles: {file: globalThis.File; preview?: string}[] = [];
+                    Array.from(files).forEach(f => {
+                      if (f.size > maxSize) {
+                        toast.error(`"${f.name}" excede 5MB`);
+                        return;
+                      }
+                      const entry: {file: globalThis.File; preview?: string} = { file: f };
+                      if (f.type.startsWith('image/')) {
+                        entry.preview = URL.createObjectURL(f);
+                      }
+                      newFiles.push(entry);
+                    });
+                    setPendingAttachments(prev => [...prev, ...newFiles]);
+                    e.target.value = '';
+                  }}
+                />
+                <div className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-border/30 hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm text-muted-foreground hover:text-primary">
+                  <Upload className="h-4 w-4" />
+                  <span>Clique para anexar arquivos</span>
+                </div>
+              </label>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">Imagens, PDF, Word, Excel, CSV, TXT, ZIP (máx. 5MB cada)</p>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => {
+              pendingAttachments.forEach(a => { if (a.preview) URL.revokeObjectURL(a.preview); });
+              setPendingAttachments([]);
+              setShowCreateDialog(false);
+            }}>Cancelar</Button>
             <Button onClick={() => {
               if (!newTitle.trim()) { toast.error("Título obrigatório"); return; }
               createMutation.mutate({
@@ -1371,6 +1446,27 @@ export default function CollaboratorKanban() {
                 assigneeId: userId,
                 dueDate: newDueDate ? new Date(newDueDate).getTime() : undefined,
                 checklistItems: newChecklistItems.length > 0 ? newChecklistItems.map((t, i) => ({ title: t, sortOrder: i })) : undefined,
+              }, {
+                onSuccess: (result: any) => {
+                  // Upload pending attachments after task is created
+                  if (pendingAttachments.length > 0 && result?.id) {
+                    pendingAttachments.forEach(att => {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const base64 = (reader.result as string).split(',')[1];
+                        addAttachmentMutation.mutate({
+                          taskId: result.id,
+                          fileName: att.file.name,
+                          fileType: att.file.type || 'application/octet-stream',
+                          fileSize: att.file.size,
+                          fileData: base64,
+                        });
+                      };
+                      reader.readAsDataURL(att.file);
+                      if (att.preview) URL.revokeObjectURL(att.preview);
+                    });
+                  }
+                },
               });
             }} disabled={createMutation.isPending}>
               {createMutation.isPending ? "Criando..." : "Criar Tarefa"}
