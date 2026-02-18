@@ -23,11 +23,12 @@ const COLORS = {
 export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const isAdmin = user?.role === "admin";
   const { data: stats, isLoading: statsLoading } = trpc.dashboard.stats.useQuery({});
   const { data: ranking } = trpc.gamification.ranking.useQuery();
   const { data: recentCompletions } = trpc.dashboard.recentCompletions.useQuery({ days: 30 });
   const { data: activityData } = trpc.activity.list.useQuery({ limit: 8 });
-  const { data: collaborators } = trpc.collaborators.listWithStats.useQuery();
+  const { data: collaborators } = trpc.collaborators.listWithStats.useQuery(undefined, { enabled: isAdmin });
   const themeColors = useThemeColors();
 
   const pieData = useMemo(() => {
@@ -118,7 +119,7 @@ export default function Home() {
             Olá, {user?.name?.split(" ")[0]}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Aqui está o resumo de desempenho da sua equipe.
+            {isAdmin ? "Aqui está o resumo de desempenho da sua equipe." : "Aqui está o resumo das suas tarefas."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -233,8 +234,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Comparative Bar Chart */}
-      {barData.length > 1 && (
+      {/* Comparative Bar Chart - apenas admin */}
+      {isAdmin && barData.length > 1 && (
         <div className="stat-card p-5" style={{ "--stat-accent": "oklch(0.65 0.18 240)" } as React.CSSProperties}>
           <h3 className="text-sm font-semibold mb-4">Comparativo por Colaborador</h3>
           <ResponsiveContainer width="100%" height={200}>

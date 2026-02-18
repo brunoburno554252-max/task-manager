@@ -469,6 +469,25 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
   return result;
 }
 
+export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, companyId: number) {
+  // Retorna todos os colaboradores, mas com stats filtradas por empresa
+  const result = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    phone: users.phone,
+    role: users.role,
+    totalPoints: users.totalPoints,
+    createdAt: users.createdAt,
+    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
+    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId})`,
+  }).from(users).orderBy(desc(users.totalPoints));
+
+  return result;
+}
+
 // ============ CHAT ============
 
 export async function sendChatMessage(db: DrizzleD1Database, userId: number, content: string) {

@@ -8,7 +8,7 @@ import {
   getAllBadges, getUserBadges, checkAndAwardBadges, seedBadges,
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
   getUserById, createComment, getCommentsByTaskId, deleteComment,
-  getTaskActivities, getCollaboratorsWithStats,
+  getTaskActivities, getCollaboratorsWithStats, getCollaboratorsWithStatsByCompany,
   sendChatMessage, getChatMessages, updateUser,
   getChecklistByTaskId, createChecklistItem, createChecklistItems,
   updateChecklistItem, deleteChecklistItem, deleteChecklistByTaskId,
@@ -529,6 +529,11 @@ export const appRouter = router({
     listWithStats: protectedProcedure.query(async ({ ctx }) => {
       return getCollaboratorsWithStats(ctx.db);
     }),
+    listWithStatsByCompany: protectedProcedure
+      .input(z.object({ companyId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getCollaboratorsWithStatsByCompany(ctx.db, input.companyId);
+      }),
   }),
 
   chat: router({

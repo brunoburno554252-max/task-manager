@@ -30,10 +30,19 @@ export default function Collaborators() {
   const [editUser, setEditUser] = useState<{ id: number; name: string; email: string; phone: string; role: string } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "user" });
 
-  const { data: collaborators, isLoading } = trpc.collaborators.listWithStats.useQuery();
+  // Quando dentro de empresa, usar stats filtradas por empresa
+  const { data: allCollaborators, isLoading: isLoadingAll } = trpc.collaborators.listWithStats.useQuery(undefined, { enabled: !companyId });
+  const { data: companyCollaborators, isLoading: isLoadingCompany } = trpc.collaborators.listWithStatsByCompany.useQuery(
+    { companyId: companyId! },
+    { enabled: !!companyId }
+  );
+
+  const collaborators = companyId ? companyCollaborators : allCollaborators;
+  const isLoading = companyId ? isLoadingCompany : isLoadingAll;
+
   const utils = trpc.useUtils();
 
-  // Registration dialog
+  // Registration dialog (only for non-company view)
   const [showRegister, setShowRegister] = useState(false);
   const [regForm, setRegForm] = useState({ name: "", email: "", password: "", phone: "", role: "user" as "user" | "admin" });
   const createUserMutation = trpc.users.create.useMutation({
@@ -52,6 +61,7 @@ export default function Collaborators() {
       toast.success("Colaborador atualizado!");
       setEditUser(null);
       utils.collaborators.listWithStats.invalidate();
+      if (companyId) utils.collaborators.listWithStatsByCompany.invalidate();
       utils.users.list.invalidate();
     },
     onError: () => toast.error("Erro ao atualizar colaborador"),
@@ -138,7 +148,7 @@ export default function Collaborators() {
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={company ? { backgroundColor: company.color } : undefined} >
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={company ? { backgroundColor: company.color || undefined } : undefined} >
             {company ? (
               <Building2 className="h-5 w-5 text-white" />
             ) : (
@@ -148,60 +158,63 @@ export default function Collaborators() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{company ? company.name : "Colaboradores"}</h1>
             <p className="text-sm text-muted-foreground">
-              {company ? `${collaborators?.length ?? 0} colaboradores` : `${collaborators?.length ?? 0} colaboradores cadastrados`}
+              {collaborators?.length ?? 0} colaboradores
             </p>
           </div>
         </div>
-        {user?.role === "admin" && (
+        {/* Só mostra botão Cadastrar fora do contexto de empresa (na página Cadastros) */}
+        {!companyId && user?.role === "admin" && (
           <Button onClick={() => setShowRegister(true)} className="gap-2">
             <UserPlus className="h-4 w-4" /> Cadastrar
           </Button>
         )}
       </div>
 
-      {/* Register Dialog */}
-      <Dialog open={showRegister} onOpenChange={setShowRegister}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cadastrar Colaborador</DialogTitle>
-            <DialogDescription>Preencha os dados do novo colaborador.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); createUserMutation.mutate(regForm); }} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Nome</Label>
-              <Input placeholder="Nome completo" value={regForm.name} onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Email</Label>
-              <Input type="email" placeholder="email@exemplo.com" value={regForm.email} onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Telefone</Label>
-              <Input type="tel" placeholder="(11) 99999-9999" value={regForm.phone} onChange={e => setRegForm(f => ({ ...f, phone: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Senha</Label>
-              <Input type="password" placeholder="Mínimo 6 caracteres" value={regForm.password} onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))} required minLength={6} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Função</Label>
-              <Select value={regForm.role} onValueChange={v => setRegForm(f => ({ ...f, role: v as "user" | "admin" }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">Colaborador</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={createUserMutation.isPending} className="gap-2">
-                {createUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                Cadastrar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Register Dialog - só fora do contexto de empresa */}
+      {!companyId && (
+        <Dialog open={showRegister} onOpenChange={setShowRegister}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cadastrar Colaborador</DialogTitle>
+              <DialogDescription>Preencha os dados do novo colaborador.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); createUserMutation.mutate(regForm); }} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nome</Label>
+                <Input placeholder="Nome completo" value={regForm.name} onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email</Label>
+                <Input type="email" placeholder="email@exemplo.com" value={regForm.email} onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Telefone</Label>
+                <Input type="tel" placeholder="(11) 99999-9999" value={regForm.phone} onChange={e => setRegForm(f => ({ ...f, phone: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Senha</Label>
+                <Input type="password" placeholder="Mínimo 6 caracteres" value={regForm.password} onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))} required minLength={6} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Função</Label>
+                <Select value={regForm.role} onValueChange={v => setRegForm(f => ({ ...f, role: v as "user" | "admin" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Colaborador</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={createUserMutation.isPending} className="gap-2">
+                  {createUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  Cadastrar
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -244,7 +257,7 @@ export default function Collaborators() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Buscar colaborador..."
@@ -265,12 +278,11 @@ export default function Collaborators() {
           return (
             <div
               key={collab.id}
-              onClick={() => setLocation(`/kanban/${collab.id}`)}
-              className="group relative rounded-xl bg-card/80 border border-border/30 p-5 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
               onClick={() => setLocation(companyId ? `/company/${companyId}/kanban/${collab.id}` : `/kanban/${collab.id}`)}
+              className="group relative rounded-xl bg-card/80 border border-border/30 p-5 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
             >
               {/* Rank indicator for top 3 */}
-              {index < 3 && (
+              {index < 3 && !companyId && (
                 <div className="absolute -top-2 -right-2">
                   <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
                     index === 0 ? "bg-amber-500 text-white" :
@@ -306,7 +318,7 @@ export default function Collaborators() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  {user?.role === "admin" && (
+                  {user?.role === "admin" && !companyId && (
                     <button
                       onClick={(e) => handleEdit(collab, e)}
                       className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100"

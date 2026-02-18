@@ -289,6 +289,7 @@ export default function CollaboratorKanban() {
   const [activeTab, setActiveTab] = useState<TaskStatus>("pending");
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
@@ -320,6 +321,8 @@ export default function CollaboratorKanban() {
   const { data: collabUser } = trpc.users.getById.useQuery({ id: userId });
   const { data: allTasks, isLoading } = trpc.tasks.list.useQuery({ assigneeId: userId, companyId });
   const { data: allUsers } = trpc.users.list.useQuery();
+  // Lista de empresas para filtro (só quando não está no contexto de empresa)
+  const { data: companiesList } = trpc.companies.list.useQuery(undefined, { enabled: !companyId });
   const utils = trpc.useUtils();
 
   const { data: comments } = trpc.tasks.comments.useQuery(
@@ -454,8 +457,13 @@ export default function CollaboratorKanban() {
     if (priorityFilter !== "all") {
       result = result.filter(t => t.priority === priorityFilter);
     }
+    // Filtro por empresa (só quando não está no contexto de empresa via URL)
+    if (!companyId && companyFilter !== "all") {
+      const cId = parseInt(companyFilter);
+      result = result.filter(t => (t as any).companyId === cId);
+    }
     return result;
-  }, [tasks, search, priorityFilter]);
+  }, [tasks, search, priorityFilter, companyId, companyFilter]);
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
@@ -1118,6 +1126,26 @@ export default function CollaboratorKanban() {
             })}
           </SelectContent>
         </Select>
+
+        {/* Filtro por empresa (só quando não está no contexto de empresa via URL) */}
+        {!companyId && companiesList && companiesList.length > 0 && (
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="w-[160px] bg-card/80 border-border/30">
+              <SelectValue placeholder="Empresa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas Empresas</SelectItem>
+              {companiesList.map((c: any) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: c.color || '#888' }} />
+                    {c.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* View Toggle — 4 modes */}
         <div className="flex items-center gap-0.5 bg-card/80 border border-border/30 rounded-lg p-1">
