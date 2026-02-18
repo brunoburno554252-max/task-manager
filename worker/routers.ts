@@ -72,6 +72,7 @@ export const appRouter = router({
         name: z.string().min(1).max(255),
         email: z.string().email().max(320),
         password: z.string().min(6),
+        phone: z.string().max(20).optional(),
         role: z.enum(["user", "admin"]).default("user"),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -94,6 +95,7 @@ export const appRouter = router({
           openId,
           name: input.name,
           email: input.email,
+          phone: input.phone ?? null,
           role: input.role,
           passwordHash,
           totalPoints: 0,

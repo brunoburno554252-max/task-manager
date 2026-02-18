@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   Users, Search, CheckCircle2, Clock, AlertCircle, ListTodo,
-  TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil,
+  TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil, UserPlus, Loader2,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
@@ -28,6 +28,20 @@ export default function Collaborators() {
 
   const { data: collaborators, isLoading } = trpc.collaborators.listWithStats.useQuery();
   const utils = trpc.useUtils();
+
+  // Registration dialog
+  const [showRegister, setShowRegister] = useState(false);
+  const [regForm, setRegForm] = useState({ name: "", email: "", password: "", phone: "", role: "user" as "user" | "admin" });
+  const createUserMutation = trpc.users.create.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador cadastrado com sucesso!");
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+      setShowRegister(false);
+      setRegForm({ name: "", email: "", password: "", phone: "", role: "user" });
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const updateUserMutation = trpc.users.update.useMutation({
     onSuccess: () => {
@@ -125,7 +139,56 @@ export default function Collaborators() {
             </p>
           </div>
         </div>
+        {user?.role === "admin" && (
+          <Button onClick={() => setShowRegister(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" /> Cadastrar
+          </Button>
+        )}
       </div>
+
+      {/* Register Dialog */}
+      <Dialog open={showRegister} onOpenChange={setShowRegister}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Colaborador</DialogTitle>
+            <DialogDescription>Preencha os dados do novo colaborador.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); createUserMutation.mutate(regForm); }} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nome</Label>
+              <Input placeholder="Nome completo" value={regForm.name} onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <Input type="email" placeholder="email@exemplo.com" value={regForm.email} onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Telefone</Label>
+              <Input type="tel" placeholder="(11) 99999-9999" value={regForm.phone} onChange={e => setRegForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Senha</Label>
+              <Input type="password" placeholder="Mínimo 6 caracteres" value={regForm.password} onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))} required minLength={6} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Função</Label>
+              <Select value={regForm.role} onValueChange={v => setRegForm(f => ({ ...f, role: v as "user" | "admin" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">Colaborador</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={createUserMutation.isPending} className="gap-2">
+                {createUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Cadastrar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
