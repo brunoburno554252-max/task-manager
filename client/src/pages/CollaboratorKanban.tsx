@@ -22,6 +22,7 @@ import {
   ArrowDown, Search, X, MessageSquare, History, Send,
   Columns3, LayoutGrid, List, Eye, ChevronRight,
   ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
+  ChevronLeft,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -41,7 +42,7 @@ import confetti from "canvas-confetti";
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "completed";
 type Priority = "low" | "medium" | "high" | "urgent";
-type ViewMode = "tabs" | "kanban" | "list" | "simple";
+type ViewMode = "tabs" | "kanban" | "list" | "simple" | "agenda";
 
 type TaskItem = {
   id: number;
@@ -80,6 +81,7 @@ const viewModes: { key: ViewMode; label: string; icon: React.ElementType; desc: 
   { key: "list", label: "Lista", icon: List, desc: "Tabela compacta" },
   { key: "tabs", label: "Abas", icon: LayoutGrid, desc: "Cards por status" },
   { key: "kanban", label: "Kanban", icon: Columns3, desc: "Colunas arrastáveis" },
+  { key: "agenda", label: "Agenda", icon: Calendar, desc: "Calendário mensal" },
 ];
 
 // ==================== SORTABLE CARD ====================
@@ -281,6 +283,7 @@ export default function CollaboratorKanban() {
   const [, setLocation] = useLocation();
 
   const [viewMode, setViewMode] = useState<ViewMode>("simple");
+  const [agendaDate, setAgendaDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState<TaskStatus>("pending");
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -486,6 +489,73 @@ export default function CollaboratorKanban() {
   }, [filteredTasks]);
 
   const isAdmin = user?.role === "admin";
+
+  // ===== AGENDA HELPERS =====
+  const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  const calendarDays = useMemo(() => {
+    const year = agendaDate.getFullYear();
+    const month = agendaDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDayOfWeek = firstDay.getDay();
+    const days: { date: Date; isCurrentMonth: boolean; isToday: boolean }[] = [];
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const d = new Date(year, month, -i);
+      days.push({ date: d, isCurrentMonth: false, isToday: false });
+    }
+    const today = new Date();
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      const d = new Date(year, month, i);
+      const isToday = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+      days.push({ date: d, isCurrentMonth: true, isToday });
+    }
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({ date: d, isCurrentMonth: false, isToday: false });
+    }
+    return days;
+  }, [agendaDate]);
+
+  const tasksByDate = useMemo(() => {
+    const map: Record<string, TaskItem[]> = {};
+    filteredTasks.forEach(task => {
+      if (task.dueDate) {
+        const d = new Date(task.dueDate);
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (!map[dateKey]) map[dateKey] = [];
+        map[dateKey].push(task);
+      }
+    });
+    return map;
+  }, [filteredTasks]);
+
+  const agendaListItems = useMemo(() => {
+    const year = agendaDate.getFullYear();
+    const month = agendaDate.getMonth();
+    const items: { date: string; dateLabel: string; tasks: TaskItem[] }[] = [];
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayTasks = tasksByDate[dateKey] || [];
+      if (dayTasks.length > 0) {
+        const dayOfWeek = dayNames[dateObj.getDay()];
+        items.push({ date: dateKey, dateLabel: `${d} ${monthNames[month].slice(0, 3)} - ${dayOfWeek}`, tasks: dayTasks });
+      }
+    }
+    const noDueDateTasks = filteredTasks.filter(t => !t.dueDate);
+    if (noDueDateTasks.length > 0) {
+      items.push({ date: "no-date", dateLabel: "Sem prazo definido", tasks: noDueDateTasks });
+    }
+    return items;
+  }, [filteredTasks, tasksByDate, agendaDate]);
+
+  const navigateMonth = (delta: number) => {
+    setAgendaDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  };
 
   const changeViewMode = (mode: ViewMode) => {
     setViewMode(mode);
@@ -1268,6 +1338,136 @@ export default function CollaboratorKanban() {
             {activeTask ? <DragOverlayCard task={activeTask} /> : null}
           </DragOverlay>
         </DndContext>
+      )}
+
+      {/* ===== AGENDA VIEW ===== */}
+      {viewMode === "agenda" && (
+        <div className="space-y-4">
+          {/* Calendar Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigateMonth(-1)}
+                className="h-8 w-8 rounded-lg bg-card/80 border border-border/30 flex items-center justify-center hover:bg-muted/50 transition-colors">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <h2 className="text-lg font-semibold min-w-[180px] text-center">
+                {monthNames[agendaDate.getMonth()]} {agendaDate.getFullYear()}
+              </h2>
+              <button onClick={() => navigateMonth(1)}
+                className="h-8 w-8 rounded-lg bg-card/80 border border-border/30 flex items-center justify-center hover:bg-muted/50 transition-colors">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button onClick={() => setAgendaDate(new Date())}
+                className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors">
+                Hoje
+              </button>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Pendente</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Em Andamento</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Concluída</span>
+            </div>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-border/30">
+              {dayNames.map(day => (
+                <div key={day} className="px-2 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/20">
+                  {day}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {calendarDays.map((day, idx) => {
+                const dateKey = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
+                const dayTasks = tasksByDate[dateKey] || [];
+                return (
+                  <div key={idx} className={`min-h-[100px] p-1.5 border-b border-r border-border/10 transition-colors ${
+                    !day.isCurrentMonth ? "bg-muted/5 opacity-40" : ""
+                  } ${day.isToday ? "bg-primary/5" : ""}`}>
+                    <div className={`text-xs font-medium mb-1 px-1 ${
+                      day.isToday ? "text-primary font-bold" : day.isCurrentMonth ? "text-foreground" : "text-muted-foreground"
+                    }`}>
+                      {day.isToday ? (
+                        <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px]">
+                          {day.date.getDate()}
+                        </span>
+                      ) : day.date.getDate()}
+                    </div>
+                    <div className="space-y-0.5">
+                      {dayTasks.slice(0, 3).map(task => (
+                        <div key={task.id} onClick={() => setSelectedTask(task)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] leading-tight cursor-pointer border transition-all hover:scale-[1.02] ${
+                            task.status === "pending" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
+                            task.status === "in_progress" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
+                            "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          }`}
+                          title={`${task.title} (${priorityConfig[task.priority].label})`}>
+                          <span className="truncate font-medium block">{task.title}</span>
+                        </div>
+                      ))}
+                      {dayTasks.length > 3 && (
+                        <div className="text-[10px] text-muted-foreground px-1 font-medium">+{dayTasks.length - 3} mais</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Agenda List */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Calendar className="h-4 w-4" /> Tarefas do mês
+            </h3>
+            {agendaListItems.length === 0 ? (
+              <div className="text-center py-12 rounded-xl bg-card/80 border border-border/30">
+                <Calendar className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">Nenhuma tarefa neste mês</p>
+              </div>
+            ) : (
+              agendaListItems.map(item => (
+                <div key={item.date} className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-muted/20 border-b border-border/30 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{item.dateLabel}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{item.tasks.length}</Badge>
+                  </div>
+                  <div className="divide-y divide-border/10">
+                    {item.tasks.map(task => {
+                      const sc = statusConfig[task.status];
+                      const pc = priorityConfig[task.priority];
+                      const PIcon = pc.icon;
+                      return (
+                        <div key={task.id} onClick={() => setSelectedTask(task)}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer">
+                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${sc.dotColor}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium truncate">{task.title}</span>
+                              <PIcon className={`h-3 w-3 shrink-0 ${pc.color}`} />
+                            </div>
+                            {task.description && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className={`text-[10px] shrink-0 ${
+                            task.status === "pending" ? "border-orange-500/30 text-orange-400" :
+                            task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
+                            "border-emerald-500/30 text-emerald-400"
+                          }`}>
+                            {sc.label}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       )}
 
       {/* Create Dialog */}

@@ -14,27 +14,19 @@ import {
 import {
   Users, Search, CheckCircle2, Clock, AlertCircle, ListTodo,
   TrendingUp, Zap, ChevronRight, Crown, Phone, Pencil, UserPlus, Loader2,
-  LayoutGrid, CalendarDays, ChevronLeft, ChevronRightIcon,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
-type ViewMode = "cards" | "agenda";
-
 export default function Collaborators() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [editUser, setEditUser] = useState<{ id: number; name: string; email: string; phone: string; role: string } | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "user" });
 
-  // Agenda state
-  const [currentDate, setCurrentDate] = useState(new Date());
-
   const { data: collaborators, isLoading } = trpc.collaborators.listWithStats.useQuery();
-  const { data: allTasksData } = trpc.tasks.list.useQuery({ limit: 500 });
   const utils = trpc.useUtils();
 
   // Registration dialog
@@ -111,136 +103,6 @@ export default function Collaborators() {
     }), { pending: 0, inProgress: 0, completed: 0, total: 0 });
   }, [collaborators]);
 
-  // Agenda helpers
-  const allTasks = allTasksData?.tasks ?? [];
-
-  const collaboratorMap = useMemo(() => {
-    const map: Record<number, { name: string; initials: string }> = {};
-    collaborators?.forEach(c => {
-      const initials = (c.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-      map[c.id] = { name: c.name || "Sem nome", initials };
-    });
-    return map;
-  }, [collaborators]);
-
-  const calendarDays = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDayOfWeek = firstDay.getDay(); // 0=Sun
-
-    const days: { date: Date; isCurrentMonth: boolean; isToday: boolean }[] = [];
-
-    // Previous month days
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-      const d = new Date(year, month, -i);
-      days.push({ date: d, isCurrentMonth: false, isToday: false });
-    }
-
-    // Current month days
-    const today = new Date();
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      const d = new Date(year, month, i);
-      const isToday = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
-      days.push({ date: d, isCurrentMonth: true, isToday });
-    }
-
-    // Next month days to fill grid (6 rows)
-    const remaining = 42 - days.length;
-    for (let i = 1; i <= remaining; i++) {
-      const d = new Date(year, month + 1, i);
-      days.push({ date: d, isCurrentMonth: false, isToday: false });
-    }
-
-    return days;
-  }, [currentDate]);
-
-  const tasksByDate = useMemo(() => {
-    const map: Record<string, typeof allTasks> = {};
-    allTasks.forEach(task => {
-      if (task.dueDate && typeof task.dueDate === "string") {
-        const dateKey = task.dueDate.split("T")[0];
-        if (!map[dateKey]) map[dateKey] = [];
-        map[dateKey].push(task);
-      }
-    });
-    return map;
-  }, [allTasks]);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending": return "bg-orange-500";
-      case "in_progress": return "bg-blue-500";
-      case "completed": return "bg-emerald-500";
-      default: return "bg-gray-500";
-    }
-  };
-
-  const getStatusBg = (status: string) => {
-    switch (status) {
-      case "pending": return "bg-orange-500/10 border-orange-500/20 text-orange-400";
-      case "in_progress": return "bg-blue-500/10 border-blue-500/20 text-blue-400";
-      case "completed": return "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-      default: return "bg-gray-500/10 border-gray-500/20 text-gray-400";
-    }
-  };
-
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case "urgent": return "🔴";
-      case "high": return "🟠";
-      case "medium": return "🟡";
-      case "low": return "🟢";
-      default: return "⚪";
-    }
-  };
-
-  const monthNames = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-  ];
-  const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-  const navigateMonth = (delta: number) => {
-    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
-  };
-
-  // Agenda list view - tasks grouped by date for the current month
-  const agendaListItems = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const items: { date: string; dateLabel: string; tasks: typeof allTasks }[] = [];
-
-    // Get all dates in the month that have tasks
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateObj = new Date(year, month, d);
-      const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const dayTasks = tasksByDate[dateKey] || [];
-      if (dayTasks.length > 0) {
-        const dayOfWeek = dayNames[dateObj.getDay()];
-        items.push({
-          date: dateKey,
-          dateLabel: `${d} ${monthNames[month].slice(0, 3)} - ${dayOfWeek}`,
-          tasks: dayTasks,
-        });
-      }
-    }
-
-    // Also add tasks without due date
-    const noDueDateTasks = allTasks.filter(t => !t.dueDate || typeof t.dueDate !== "string");
-    if (noDueDateTasks.length > 0) {
-      items.push({
-        date: "no-date",
-        dateLabel: "Sem prazo definido",
-        tasks: noDueDateTasks,
-      });
-    }
-
-    return items;
-  }, [allTasks, tasksByDate, currentDate]);
-
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -277,38 +139,11 @@ export default function Collaborators() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* View Mode Toggle */}
-          <div className="flex items-center rounded-lg border border-border/30 bg-card/80 p-1">
-            <button
-              onClick={() => setViewMode("cards")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                viewMode === "cards"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Cards
-            </button>
-            <button
-              onClick={() => setViewMode("agenda")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                viewMode === "agenda"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              Agenda
-            </button>
-          </div>
-          {user?.role === "admin" && (
-            <Button onClick={() => setShowRegister(true)} className="gap-2">
-              <UserPlus className="h-4 w-4" /> Cadastrar
-            </Button>
-          )}
-        </div>
+        {user?.role === "admin" && (
+          <Button onClick={() => setShowRegister(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" /> Cadastrar
+          </Button>
+        )}
       </div>
 
       {/* Register Dialog */}
@@ -395,308 +230,132 @@ export default function Collaborators() {
         </div>
       </div>
 
-      {/* Search (only in cards mode) */}
-      {viewMode === "cards" && (
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar colaborador..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9 bg-card/80 border-border/30"
-          />
-        </div>
-      )}
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar colaborador..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9 bg-card/80 border-border/30"
+        />
+      </div>
 
-      {/* ===== CARDS VIEW ===== */}
-      {viewMode === "cards" && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((collab, index) => {
-              const completionRate = collab.totalTasks > 0
-                ? Math.round((collab.completedTasks / collab.totalTasks) * 100)
-                : 0;
-              const initials = (collab.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+      {/* Collaborator Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map((collab, index) => {
+          const completionRate = collab.totalTasks > 0
+            ? Math.round((collab.completedTasks / collab.totalTasks) * 100)
+            : 0;
+          const initials = (collab.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
-              return (
-                <div
-                  key={collab.id}
-                  onClick={() => setLocation(`/kanban/${collab.id}`)}
-                  className="group relative rounded-xl bg-card/80 border border-border/30 p-5 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
-                >
-                  {index < 3 && (
-                    <div className="absolute -top-2 -right-2">
-                      <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
-                        index === 0 ? "bg-amber-500 text-white" :
-                        index === 1 ? "bg-slate-400 text-white" :
-                        "bg-amber-700 text-white"
-                      }`}>
-                        {index === 0 ? <Crown className="h-3.5 w-3.5" /> : index + 1}
-                      </div>
-                    </div>
+          return (
+            <div
+              key={collab.id}
+              onClick={() => setLocation(`/kanban/${collab.id}`)}
+              className="group relative rounded-xl bg-card/80 border border-border/30 p-5 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
+            >
+              {/* Rank indicator for top 3 */}
+              {index < 3 && (
+                <div className="absolute -top-2 -right-2">
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
+                    index === 0 ? "bg-amber-500 text-white" :
+                    index === 1 ? "bg-slate-400 text-white" :
+                    "bg-amber-700 text-white"
+                  }`}>
+                    {index === 0 ? <Crown className="h-3.5 w-3.5" /> : index + 1}
+                  </div>
+                </div>
+              )}
+
+              {/* User Info */}
+              <div className="flex items-center gap-3 mb-4">
+                <Avatar className="h-12 w-12 border-2 border-primary/20">
+                  <AvatarFallback className="text-sm font-bold bg-primary/15 text-primary">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold truncate">{collab.name || "Sem nome"}</h3>
+                    {collab.role === "admin" && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 shrink-0">
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{collab.email || "-"}</p>
+                  {collab.phone && (
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Phone className="h-2.5 w-2.5" /> {collab.phone}
+                    </p>
                   )}
-
-                  <div className="flex items-center gap-3 mb-4">
-                    <Avatar className="h-12 w-12 border-2 border-primary/20">
-                      <AvatarFallback className="text-sm font-bold bg-primary/15 text-primary">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate">{collab.name || "Sem nome"}</h3>
-                        {collab.role === "admin" && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 shrink-0">
-                            Admin
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">{collab.email || "-"}</p>
-                      {collab.phone && (
-                        <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Phone className="h-2.5 w-2.5" /> {collab.phone}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {user?.role === "admin" && (
-                        <button
-                          onClick={(e) => handleEdit(collab, e)}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Editar colaborador"
-                        >
-                          <Pencil className="h-3 w-3 text-muted-foreground" />
-                        </button>
-                      )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center rounded-lg bg-orange-500/10 py-2 px-1">
-                      <p className="text-lg font-bold text-orange-500">{collab.pendingTasks ?? 0}</p>
-                      <p className="text-[10px] text-muted-foreground">Pendentes</p>
-                    </div>
-                    <div className="text-center rounded-lg bg-blue-500/10 py-2 px-1">
-                      <p className="text-lg font-bold text-blue-500">{collab.inProgressTasks ?? 0}</p>
-                      <p className="text-[10px] text-muted-foreground">Andamento</p>
-                    </div>
-                    <div className="text-center rounded-lg bg-emerald-500/10 py-2 px-1">
-                      <p className="text-lg font-bold text-emerald-500">{collab.completedTasks ?? 0}</p>
-                      <p className="text-[10px] text-muted-foreground">Concluídas</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3" /> Progresso
-                      </span>
-                      <span className="font-medium">{completionRate}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-500"
-                        style={{ width: `${completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/20">
-                    <span className="text-xs text-muted-foreground">Pontuação</span>
-                    <span className="flex items-center gap-1 text-sm font-semibold text-primary">
-                      <Zap className="h-3.5 w-3.5" />
-                      {collab.totalPoints ?? 0}
-                    </span>
-                  </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {filtered.length === 0 && !isLoading && (
-            <div className="text-center py-16">
-              <Users className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground">
-                {search ? "Nenhum colaborador encontrado" : "Nenhum colaborador cadastrado"}
-              </p>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ===== AGENDA VIEW ===== */}
-      {viewMode === "agenda" && (
-        <div className="space-y-6">
-          {/* Calendar Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigateMonth(-1)}
-                className="h-8 w-8 rounded-lg bg-card/80 border border-border/30 flex items-center justify-center hover:bg-muted/50 transition-colors"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <h2 className="text-lg font-semibold min-w-[180px] text-center">
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </h2>
-              <button
-                onClick={() => navigateMonth(1)}
-                className="h-8 w-8 rounded-lg bg-card/80 border border-border/30 flex items-center justify-center hover:bg-muted/50 transition-colors"
-              >
-                <ChevronRightIcon className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setCurrentDate(new Date())}
-                className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-              >
-                Hoje
-              </button>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Pendente</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Em Andamento</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Concluída</span>
-            </div>
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-border/30">
-              {dayNames.map(day => (
-                <div key={day} className="px-2 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/20">
-                  {day}
+                <div className="flex items-center gap-1 shrink-0">
+                  {user?.role === "admin" && (
+                    <button
+                      onClick={(e) => handleEdit(collab, e)}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Editar colaborador"
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  )}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
-              ))}
-            </div>
-
-            {/* Calendar cells */}
-            <div className="grid grid-cols-7">
-              {calendarDays.map((day, idx) => {
-                const dateKey = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
-                const dayTasks = tasksByDate[dateKey] || [];
-
-                return (
-                  <div
-                    key={idx}
-                    className={`min-h-[100px] p-1.5 border-b border-r border-border/10 transition-colors ${
-                      !day.isCurrentMonth ? "bg-muted/5 opacity-40" : ""
-                    } ${day.isToday ? "bg-primary/5" : ""}`}
-                  >
-                    <div className={`text-xs font-medium mb-1 px-1 ${
-                      day.isToday
-                        ? "text-primary font-bold"
-                        : day.isCurrentMonth
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    }`}>
-                      {day.isToday ? (
-                        <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px]">
-                          {day.date.getDate()}
-                        </span>
-                      ) : (
-                        day.date.getDate()
-                      )}
-                    </div>
-                    <div className="space-y-0.5">
-                      {dayTasks.slice(0, 3).map(task => {
-                        const collab = collaboratorMap[task.assigneeId ?? 0];
-                        return (
-                          <div
-                            key={task.id}
-                            onClick={() => task.assigneeId && setLocation(`/kanban/${task.assigneeId}`)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] leading-tight cursor-pointer border transition-all hover:scale-[1.02] ${getStatusBg(task.status)}`}
-                            title={`${task.title} — ${collab?.name || "Sem responsável"} (${task.priority})`}
-                          >
-                            <div className="flex items-center gap-1">
-                              <span className="truncate font-medium">{task.title}</span>
-                            </div>
-                            {collab && (
-                              <span className="text-[9px] opacity-70 truncate block">{collab.name}</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {dayTasks.length > 3 && (
-                        <div className="text-[10px] text-muted-foreground px-1 font-medium">
-                          +{dayTasks.length - 3} mais
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Agenda List - Tasks for the month */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-              <CalendarDays className="h-4 w-4" />
-              Tarefas do mês
-            </h3>
-
-            {agendaListItems.length === 0 ? (
-              <div className="text-center py-12 rounded-xl bg-card/80 border border-border/30">
-                <CalendarDays className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Nenhuma tarefa neste mês</p>
               </div>
-            ) : (
-              agendaListItems.map(item => (
-                <div key={item.date} className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-muted/20 border-b border-border/30">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      {item.dateLabel}
-                    </span>
-                    <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 h-4">
-                      {item.tasks.length}
-                    </Badge>
-                  </div>
-                  <div className="divide-y divide-border/10">
-                    {item.tasks.map(task => {
-                      const collab = collaboratorMap[task.assigneeId ?? 0];
-                      return (
-                        <div
-                          key={task.id}
-                          onClick={() => task.assigneeId && setLocation(`/kanban/${task.assigneeId}`)}
-                          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
-                        >
-                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${getStatusColor(task.status)}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium truncate">{task.title}</span>
-                              <span className="text-xs">{getPriorityIcon(task.priority)}</span>
-                            </div>
-                            {task.description && (
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
-                            )}
-                          </div>
-                          {collab && (
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Avatar className="h-6 w-6 border border-primary/20">
-                                <AvatarFallback className="text-[9px] font-bold bg-primary/15 text-primary">
-                                  {collab.initials}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-xs text-muted-foreground hidden sm:block">{collab.name}</span>
-                            </div>
-                          )}
-                          <Badge variant="outline" className={`text-[10px] shrink-0 ${
-                            task.status === "pending" ? "border-orange-500/30 text-orange-400" :
-                            task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
-                            "border-emerald-500/30 text-emerald-400"
-                          }`}>
-                            {task.status === "pending" ? "Pendente" : task.status === "in_progress" ? "Andamento" : "Concluída"}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
+
+              {/* Task Stats */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="text-center rounded-lg bg-orange-500/10 py-2 px-1">
+                  <p className="text-lg font-bold text-orange-500">{collab.pendingTasks ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Pendentes</p>
                 </div>
-              ))
-            )}
-          </div>
+                <div className="text-center rounded-lg bg-blue-500/10 py-2 px-1">
+                  <p className="text-lg font-bold text-blue-500">{collab.inProgressTasks ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Andamento</p>
+                </div>
+                <div className="text-center rounded-lg bg-emerald-500/10 py-2 px-1">
+                  <p className="text-lg font-bold text-emerald-500">{collab.completedTasks ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Concluídas</p>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Progresso
+                  </span>
+                  <span className="font-medium">{completionRate}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-500"
+                    style={{ width: `${completionRate}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Points */}
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/20">
+                <span className="text-xs text-muted-foreground">Pontuação</span>
+                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+                  <Zap className="h-3.5 w-3.5" />
+                  {collab.totalPoints ?? 0}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 && !isLoading && (
+        <div className="text-center py-16">
+          <Users className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+          <p className="text-muted-foreground">
+            {search ? "Nenhum colaborador encontrado" : "Nenhum colaborador cadastrado"}
+          </p>
         </div>
       )}
 
