@@ -16,6 +16,7 @@ import {
   deleteAttachment, deleteAttachmentsByTaskId,
   getAllCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, getCompaniesWithStats,
   getCompanyMembers, addCompanyMember, removeCompanyMember, getCompanyCollaboratorsWithStats,
+  getTaskAssignees, setTaskAssignees,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -155,6 +156,7 @@ export const appRouter = router({
         description: z.string().optional(),
         priority: z.enum(["low", "medium", "high", "urgent"]),
         assigneeId: z.number().optional(),
+        assigneeIds: z.array(z.number()).optional(),
         dueDate: z.number().optional(),
         companyId: z.number().optional(),
         pointsReward: z.number().optional(),
@@ -210,11 +212,23 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const task = await getTaskById(ctx.db, input.id);
         if (!task) return null;
-        // Se não for admin, só pode ver tarefa atribuída a si
-        if (ctx.user.role !== "admin" && task.assigneeId !== ctx.user.id) {
-          throw new Error("Sem permissão para ver esta tarefa");
+        // Se não for admin, checar se é assignee via task_assignees ou legacy assigneeId
+        if (ctx.user.role !== "admin") {
+          const assignees = await getTaskAssignees(ctx.db, input.id);
+          const isAssignee = assignees.some(a => a.id === ctx.user.id) || task.assigneeId === ctx.user.id;
+          if (!isAssignee) {
+            throw new Error("Sem permissão para ver esta tarefa");
+          }
         }
-        return task;
+        // Return task with assignees list
+        const assignees = await getTaskAssignees(ctx.db, input.id);
+        return { ...task, assignees };
+      }),
+
+    getAssignees: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getTaskAssignees(ctx.db, input.taskId);
       }),
 
     update: protectedProcedure
@@ -224,14 +238,19 @@ export const appRouter = router({
         description: z.string().optional(),
         priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
         assigneeId: z.number().nullable().optional(),
+        assigneeIds: z.array(z.number()).optional(),
         dueDate: z.number().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { id, ...data } = input;
+        const { id, assigneeIds, ...data } = input;
         if (ctx.user.role !== "admin") {
           throw new Error("Apenas administradores podem editar tarefas");
         }
         await updateTask(ctx.db, id, data);
+        // Update assignees if provided
+        if (assigneeIds !== undefined) {
+          await setTaskAssignees(ctx.db, id, assigneeIds);
+        }
         await logActivity(ctx.db, {
           userId: ctx.user.id,
           action: "updated",
@@ -251,7 +270,10 @@ export const appRouter = router({
         const task = await getTaskById(ctx.db, input.id);
         if (!task) throw new Error("Tarefa não encontrada");
 
-        if (task.assigneeId !== ctx.user.id && ctx.user.role !== "admin") {
+        // Check permission: user must be an assignee (in task_assignees or legacy assigneeId) or admin
+        const assignees = await getTaskAssignees(ctx.db, input.id);
+        const isAssignee = assignees.some(a => a.id === ctx.user.id) || task.assigneeId === ctx.user.id;
+        if (!isAssignee && ctx.user.role !== "admin") {
           throw new Error("Sem permissão para alterar o status desta tarefa");
         }
 
@@ -262,20 +284,25 @@ export const appRouter = router({
           updateData.completedAt = now;
 
           const onTime = !task.dueDate || now <= task.dueDate;
-          const points = calculatePoints(task.priority, onTime);
-          updateData.pointsAwarded = points;
+          const totalPoints = calculatePoints(task.priority, onTime);
+          updateData.pointsAwarded = totalPoints;
 
-          if (task.assigneeId) {
-            await addPoints(ctx.db, task.assigneeId, points, `Completou tarefa "${task.title}"`, task.id);
-            const newBadges = await checkAndAwardBadges(ctx.db, task.assigneeId);
-            for (const badge of newBadges) {
-              await logActivity(ctx.db, {
-                userId: task.assigneeId,
-                action: "earned_badge",
-                entityType: "badge",
-                entityId: badge.id,
-                details: `Conquistou o badge "${badge.name}"`,
-              });
+          // Divide points among all assignees
+          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
+          if (allAssignees.length > 0) {
+            const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
+            for (const assignee of allAssignees) {
+              await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa em conjunto "${task.title}" (${allAssignees.length} colaboradores)`, task.id);
+              const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
+              for (const badge of newBadges) {
+                await logActivity(ctx.db, {
+                  userId: assignee.id,
+                  action: "earned_badge",
+                  entityType: "badge",
+                  entityId: badge.id,
+                  details: `Conquistou o badge "${badge.name}"`,
+                });
+              }
             }
           }
         }

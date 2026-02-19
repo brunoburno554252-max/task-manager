@@ -22,7 +22,7 @@ import {
   ArrowDown, Search, X, MessageSquare, History, Send,
   Columns3, LayoutGrid, List, Eye, ChevronRight,
   ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
-  ChevronLeft, Pencil,
+  ChevronLeft, Pencil, Users,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -58,6 +58,7 @@ type TaskItem = {
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
+  assignees?: { id: number; name: string | null; avatarUrl: string | null }[];
 };
 
 // ==================== CONSTANTS ====================
@@ -307,6 +308,7 @@ export default function CollaboratorKanban() {
   const [newChecklistInput, setNewChecklistInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{file: globalThis.File; preview?: string}[]>([]);
   const [newPointsReward, setNewPointsReward] = useState<number>(10);
+  const [newAdditionalAssignees, setNewAdditionalAssignees] = useState<number[]>([]);
 
   // Checklist inline add state (detail panel)
   const [inlineChecklistInput, setInlineChecklistInput] = useState("");
@@ -351,6 +353,7 @@ export default function CollaboratorKanban() {
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewDueDate("");
       setNewChecklistItems([]); setNewChecklistInput("");
       setPendingAttachments([]); setNewPointsReward(10);
+      setNewAdditionalAssignees([]);
       toast.success("Tarefa criada com sucesso!");
     },
     onError: (err) => toast.error(err.message),
@@ -822,6 +825,37 @@ export default function CollaboratorKanban() {
                     </div>
                   </div>
                 </div>
+
+                {/* ===== ASSIGNEES SECTION ===== */}
+                {(() => {
+                  const taskAssignees = allUsers?.filter(u => {
+                    // Show all users who are assignees of this task
+                    // We check the task_assignees via the assignees field from getById, or fallback to assigneeId
+                    return (task as any).assignees?.some((a: any) => a.id === u.id) || u.id === task.assigneeId;
+                  }) || [];
+                  if (taskAssignees.length > 1) {
+                    return (
+                      <div className="rounded-lg bg-blue-500/5 border border-blue-500/10 p-3">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Tarefa em Conjunto ({taskAssignees.length} colaboradores)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {taskAssignees.map(u => (
+                            <div key={u.id} className="flex items-center gap-1.5 bg-muted/20 rounded-full px-2.5 py-1">
+                              <Avatar className="h-5 w-5">
+                                {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                                <AvatarFallback className="text-[9px]">{(u.name || '?').charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs font-medium">{u.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-blue-400 mt-1.5">Pontos divididos igualmente entre os colaboradores</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {task.description && (
                   <div>
@@ -1665,6 +1699,64 @@ export default function CollaboratorKanban() {
               </div>
             </div>
 
+            {/* Colaboradores adicionais (tarefa em conjunto) */}
+            <div>
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-blue-500" /> Tarefa em Conjunto
+              </Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">Adicione outros colaboradores para dividir esta tarefa. Os pontos serão divididos igualmente.</p>
+              {/* Selected additional assignees */}
+              {newAdditionalAssignees.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {newAdditionalAssignees.map(uid => {
+                    const u = allUsers?.find(x => x.id === uid);
+                    return (
+                      <div key={uid} className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-1">
+                        <Avatar className="h-5 w-5">
+                          {u?.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                          <AvatarFallback className="text-[9px] bg-blue-500/20">{(u?.name || '?').charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-medium">{u?.name || `#${uid}`}</span>
+                        <button onClick={() => setNewAdditionalAssignees(prev => prev.filter(id => id !== uid))}
+                          className="text-muted-foreground hover:text-destructive ml-0.5">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Dropdown to add more */}
+              <Select value="" onValueChange={v => {
+                const id = parseInt(v);
+                if (id && id !== userId && !newAdditionalAssignees.includes(id)) {
+                  setNewAdditionalAssignees(prev => [...prev, id]);
+                }
+              }}>
+                <SelectTrigger className="mt-1 bg-muted/10 border-border/20">
+                  <SelectValue placeholder="Adicionar colaborador..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allUsers?.filter(u => u.id !== userId && !newAdditionalAssignees.includes(u.id) && u.role !== 'admin').map(u => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-5 w-5">
+                          {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                          <AvatarFallback className="text-[9px]">{(u.name || '?').charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        {u.name || u.email}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {newAdditionalAssignees.length > 0 && (
+                <p className="text-[11px] text-blue-500 mt-1 font-medium">
+                  Pontos serão divididos entre {newAdditionalAssignees.length + 1} colaboradores ({Math.round(newPointsReward / (newAdditionalAssignees.length + 1))} pts cada)
+                </p>
+              )}
+            </div>
+
             {/* Pontos */}
             <div>
               <Label className="text-xs font-medium flex items-center gap-1.5">
@@ -1811,7 +1903,7 @@ export default function CollaboratorKanban() {
                 title: newTitle.trim(),
                 description: newDesc.trim() || undefined,
                 priority: newPriority,
-                assigneeId: userId,
+                assigneeIds: [userId, ...newAdditionalAssignees],
                 dueDate: newDueDate ? (() => { const [y,m,d] = newDueDate.split('-').map(Number); return new Date(y, m-1, d, 12, 0, 0).getTime(); })() : undefined,
                 companyId: companyId || undefined,
                 pointsReward: newPointsReward || undefined,

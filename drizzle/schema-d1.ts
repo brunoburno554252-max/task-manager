@@ -145,6 +145,16 @@ export const companies = sqliteTable("companies", {
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = typeof companies.$inferInsert;
 
+export const taskAssignees = sqliteTable("task_assignees", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("taskId").notNull(),
+  userId: integer("userId").notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type TaskAssignee = typeof taskAssignees.$inferSelect;
+export type InsertTaskAssignee = typeof taskAssignees.$inferInsert;
+
 export const companyMembers = sqliteTable("company_members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   companyId: integer("companyId").notNull(),

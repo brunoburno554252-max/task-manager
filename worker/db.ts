@@ -4,7 +4,7 @@ import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
-  checklistItems, taskAttachments, companies, companyMembers,
+  checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -105,18 +105,23 @@ export async function createTask(db: DrizzleD1Database, data: {
   description?: string;
   priority: "low" | "medium" | "high" | "urgent";
   assigneeId?: number;
+  assigneeIds?: number[];
   createdById: number;
   dueDate?: number;
   companyId?: number;
   pointsReward?: number;
 }) {
   const now = new Date().toISOString();
+  // Use first assignee as primary assigneeId for backward compatibility
+  const primaryAssignee = data.assigneeIds && data.assigneeIds.length > 0
+    ? data.assigneeIds[0]
+    : data.assigneeId ?? null;
   const result = await db.insert(tasks).values({
     title: data.title,
     description: data.description ?? null,
     priority: data.priority,
     status: "pending",
-    assigneeId: data.assigneeId ?? null,
+    assigneeId: primaryAssignee,
     createdById: data.createdById,
     dueDate: data.dueDate ?? null,
     companyId: data.companyId ?? null,
@@ -124,7 +129,15 @@ export async function createTask(db: DrizzleD1Database, data: {
     createdAt: now,
     updatedAt: now,
   }).returning({ id: tasks.id });
-  return { id: result[0].id };
+  const taskId = result[0].id;
+  // Insert all assignees into task_assignees table
+  const allAssigneeIds = data.assigneeIds && data.assigneeIds.length > 0
+    ? data.assigneeIds
+    : data.assigneeId ? [data.assigneeId] : [];
+  for (const uid of allAssigneeIds) {
+    await db.insert(taskAssignees).values({ taskId, userId: uid, createdAt: now });
+  }
+  return { id: taskId };
 }
 
 export async function getTaskById(db: DrizzleD1Database, id: number) {
@@ -149,7 +162,13 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
     conditions.push(eq(tasks.priority, filters.priority as Task["priority"]));
   }
   if (filters?.assigneeId) {
-    conditions.push(eq(tasks.assigneeId, filters.assigneeId));
+    // Check both the legacy assigneeId column AND the task_assignees table
+    conditions.push(
+      or(
+        eq(tasks.assigneeId, filters.assigneeId),
+        sql`${tasks.id} IN (SELECT "taskId" FROM task_assignees WHERE "userId" = ${filters.assigneeId})`
+      )
+    );
   }
   if (filters?.companyId) {
     conditions.push(eq(tasks.companyId as any, filters.companyId));
@@ -200,6 +219,32 @@ export async function reorderTasks(db: DrizzleD1Database, orderedIds: number[]) 
   }
 }
 
+// ============ TASK ASSIGNEES ============
+
+export async function getTaskAssignees(db: DrizzleD1Database, taskId: number) {
+  const result = await db.select({
+    id: users.id,
+    name: users.name,
+    avatarUrl: users.avatarUrl,
+  }).from(taskAssignees)
+    .innerJoin(users, eq(taskAssignees.userId, users.id))
+    .where(eq(taskAssignees.taskId, taskId));
+  return result;
+}
+
+export async function setTaskAssignees(db: DrizzleD1Database, taskId: number, userIds: number[]) {
+  // Remove existing assignees
+  await db.delete(taskAssignees).where(eq(taskAssignees.taskId, taskId));
+  // Insert new assignees
+  const now = new Date().toISOString();
+  for (const uid of userIds) {
+    await db.insert(taskAssignees).values({ taskId, userId: uid, createdAt: now });
+  }
+  // Update primary assigneeId on task
+  const primaryAssignee = userIds.length > 0 ? userIds[0] : null;
+  await db.update(tasks).set({ assigneeId: primaryAssignee, updatedAt: now }).where(eq(tasks.id, taskId));
+}
+
 // ============ POINTS ============
 
 export async function addPoints(db: DrizzleD1Database, userId: number, points: number, reason: string, taskId?: number) {
@@ -232,9 +277,9 @@ export async function getRanking(db: DrizzleD1Database) {
     role: users.role,
     totalPoints: users.totalPoints,
     avatarUrl: users.avatarUrl,
-    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
-    onTimeTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed' AND (tasks.dueDate IS NULL OR tasks.completedAt <= tasks.dueDate))`,
-    totalAssigned: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id)`,
+    completedTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.status = 'completed')`,
+    onTimeTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.status = 'completed' AND (tasks.dueDate IS NULL OR tasks.completedAt <= tasks.dueDate))`,
+    totalAssigned: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id))`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -485,10 +530,10 @@ export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, 
     totalPoints: users.totalPoints,
     avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
-    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
-    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
-    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
-    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId})`,
+    pendingTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
+    totalTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId})`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -738,10 +783,10 @@ export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, co
     totalPoints: users.totalPoints,
     avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
-    pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
-    inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
-    completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
-    totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId})`,
+    pendingTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
+    inProgressTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
+    completedTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
+    totalTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId})`,
   }).from(users)
     .innerJoin(companyMembers, and(eq(companyMembers.userId, users.id), eq(companyMembers.companyId, companyId)))
     .orderBy(desc(users.totalPoints));
