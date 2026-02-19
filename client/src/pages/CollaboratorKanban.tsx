@@ -828,33 +828,74 @@ export default function CollaboratorKanban() {
 
                 {/* ===== ASSIGNEES SECTION ===== */}
                 {(() => {
-                  const taskAssignees = allUsers?.filter(u => {
-                    // Show all users who are assignees of this task
-                    // We check the task_assignees via the assignees field from getById, or fallback to assigneeId
-                    return (task as any).assignees?.some((a: any) => a.id === u.id) || u.id === task.assigneeId;
-                  }) || [];
-                  if (taskAssignees.length > 1) {
-                    return (
-                      <div className="rounded-lg bg-blue-500/5 border border-blue-500/10 p-3">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <Users className="h-3 w-3" /> Tarefa em Conjunto ({taskAssignees.length} colaboradores)
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {taskAssignees.map(u => (
-                            <div key={u.id} className="flex items-center gap-1.5 bg-muted/20 rounded-full px-2.5 py-1">
-                              <Avatar className="h-5 w-5">
-                                {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
-                                <AvatarFallback className="text-[9px]">{(u.name || '?').charAt(0)}</AvatarFallback>
-                              </Avatar>
-                              <span className="text-xs font-medium">{u.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-blue-400 mt-1.5">Pontos divididos igualmente entre os colaboradores</p>
+                  const taskAssigneesList: { id: number; name: string | null; avatarUrl: string | null }[] = (task as any).assignees || [];
+                  // Fallback: if no assignees from the new system, show the legacy assigneeId
+                  const currentAssigneeIds = taskAssigneesList.length > 0
+                    ? taskAssigneesList.map(a => a.id)
+                    : (task.assigneeId ? [task.assigneeId] : []);
+                  const taskAssignees = taskAssigneesList.length > 0
+                    ? taskAssigneesList.map(a => allUsers?.find(u => u.id === a.id) || { id: a.id, name: a.name || '?', avatarUrl: a.avatarUrl, role: 'collaborator' })
+                    : allUsers?.filter(u => currentAssigneeIds.includes(u.id)) || [];
+
+                  return (
+                    <div className="rounded-lg bg-blue-500/5 border border-blue-500/10 p-3">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Users className="h-3 w-3" /> Colaboradores Atribuídos ({taskAssignees.length})
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {taskAssignees.map((u: any) => (
+                          <div key={u.id} className="flex items-center gap-1.5 bg-muted/20 rounded-full px-2.5 py-1">
+                            <Avatar className="h-5 w-5">
+                              {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                              <AvatarFallback className="text-[9px]">{((u.name as string) || '?').charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-medium">{u.name}</span>
+                            {isAdmin && taskAssignees.length > 1 && (
+                              <button
+                                onClick={() => {
+                                  const newIds = currentAssigneeIds.filter(id => id !== u.id);
+                                  updateMutation.mutate({ id: task.id, assigneeIds: newIds });
+                                }}
+                                className="text-muted-foreground hover:text-destructive ml-0.5 transition-colors"
+                                title="Remover colaborador"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    );
-                  }
-                  return null;
+                      {isAdmin && (
+                        <Select value="" onValueChange={v => {
+                          const newUserId = parseInt(v);
+                          if (newUserId && !currentAssigneeIds.includes(newUserId)) {
+                            const newIds = [...currentAssigneeIds, newUserId];
+                            updateMutation.mutate({ id: task.id, assigneeIds: newIds });
+                          }
+                        }}>
+                          <SelectTrigger className="h-8 bg-muted/10 border-border/20 text-xs">
+                            <SelectValue placeholder="+ Adicionar colaborador..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allUsers?.filter(u => !currentAssigneeIds.includes(u.id) && u.role !== 'admin').map(u => (
+                              <SelectItem key={u.id} value={String(u.id)}>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-5 w-5">
+                                    {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                                    <AvatarFallback className="text-[9px]">{(u.name || '?').charAt(0)}</AvatarFallback>
+                                  </Avatar>
+                                  {u.name || u.email}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {taskAssignees.length > 1 && (
+                        <p className="text-[10px] text-blue-400 mt-1.5">Pontos divididos igualmente entre os {taskAssignees.length} colaboradores</p>
+                      )}
+                    </div>
+                  );
                 })()}
 
                 {task.description && (
