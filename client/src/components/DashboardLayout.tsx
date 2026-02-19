@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginPage } from "./LoginPage";
 import { trpc } from "@/lib/trpc";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +36,7 @@ import { Badge } from "./ui/badge";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Building2, label: "Colaboradores", path: "/kanban", adminOnly: true },
+  { icon: Building2, label: "Projetos", path: "/kanban", adminOnly: true },
   { icon: Zap, label: "Minhas Tarefas", path: "/kanban/me", dynamic: true },
   { icon: Users, label: "Cadastros", path: "/collaborators", adminOnly: true },
   { icon: Trophy, label: "Ranking", path: "/ranking" },
@@ -181,11 +181,9 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="h-7 w-7 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                    <Zap className="h-3.5 w-3.5 text-primary" />
-                  </div>
+                  <img src="/logo.png" alt="Logo" className="h-8 w-8 object-contain shrink-0" />
                   <span className="font-bold tracking-tight truncate text-sm gradient-text">
-                    TaskFlow
+                    Agenda do CEO
                   </span>
                 </div>
               ) : null}
@@ -250,6 +248,9 @@ function DashboardLayoutContent({
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-sidebar-accent transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Avatar className="h-9 w-9 shrink-0">
+                    {(user as any)?.avatarUrl ? (
+                      <AvatarImage src={(user as any).avatarUrl} alt={user?.name || ""} className="object-cover" />
+                    ) : null}
                     <AvatarFallback className="text-xs font-bold bg-primary/20 text-primary">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
@@ -308,7 +309,7 @@ function DashboardLayoutContent({
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-1.5 text-sm">
                 <button onClick={() => setLocation("/")} className="text-muted-foreground hover:text-foreground transition-colors">
-                  TaskFlow
+                  Agenda do CEO
                 </button>
                 <span className="text-muted-foreground/50">/</span>
                 <span className="font-medium text-foreground">

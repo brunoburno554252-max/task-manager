@@ -1,14 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Trophy, Award, Target, Zap, Calendar, TrendingUp, Star, Phone, Pencil, Check, X,
+  Trophy, Award, Target, Zap, Calendar, TrendingUp, Star, Phone, Pencil, Check, X, Camera,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 export default function Profile() {
@@ -28,6 +28,8 @@ export default function Profile() {
 
   const [editingPhone, setEditingPhone] = useState(false);
   const [phoneValue, setPhoneValue] = useState(user?.phone ?? "");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
   const updateProfileMutation = trpc.users.updateProfile.useMutation({
@@ -41,6 +43,89 @@ export default function Profile() {
 
   const handleSavePhone = () => {
     updateProfileMutation.mutate({ phone: phoneValue || null });
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione uma imagem válida.");
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 2MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+
+    try {
+      // Resize image to max 200x200 and compress
+      const resizedBase64 = await resizeImage(file, 200, 200, 0.8);
+      
+      updateProfileMutation.mutate(
+        { avatarUrl: resizedBase64 },
+        {
+          onSuccess: () => {
+            toast.success("Foto de perfil atualizada!");
+            setUploadingAvatar(false);
+            utils.auth.me.invalidate();
+            utils.gamification.ranking.invalidate();
+            utils.collaborators.listWithStats.invalidate();
+            utils.users.list.invalidate();
+          },
+          onError: () => {
+            toast.error("Erro ao atualizar foto de perfil.");
+            setUploadingAvatar(false);
+          },
+        }
+      );
+    } catch {
+      toast.error("Erro ao processar a imagem.");
+      setUploadingAvatar(false);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const resizeImage = (file: File, maxW: number, maxH: number, quality: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let w = img.width;
+          let h = img.height;
+
+          if (w > maxW || h > maxH) {
+            const ratio = Math.min(maxW / w, maxH / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("Canvas not supported")); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
   const formatPhone = (value: string) => {
@@ -76,11 +161,36 @@ export default function Profile() {
       {/* Profile Header */}
       <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
         <div className="flex items-center gap-5">
-          <Avatar className="h-16 w-16">
-            <AvatarFallback className="text-xl font-bold bg-primary/20 text-primary">
-              {user?.name?.charAt(0)?.toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          {/* Avatar with upload */}
+          <div className="relative group">
+            <Avatar className="h-16 w-16 cursor-pointer" onClick={handleAvatarClick}>
+              {(user as any)?.avatarUrl ? (
+                <AvatarImage src={(user as any).avatarUrl} alt={user?.name || "Avatar"} className="object-cover" />
+              ) : null}
+              <AvatarFallback className="text-xl font-bold bg-primary/20 text-primary">
+                {user?.name?.charAt(0)?.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={handleAvatarClick}
+              disabled={uploadingAvatar}
+              className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              {uploadingAvatar ? (
+                <div className="h-5 w-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Camera className="h-5 w-5 text-white" />
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+          </div>
+
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold truncate">{user?.name}</h2>

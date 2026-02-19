@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -263,6 +263,9 @@ export default function Collaborators() {
                         }}
                       >
                         <Avatar className="h-9 w-9">
+                          {(u as any).avatarUrl ? (
+                            <AvatarImage src={(u as any).avatarUrl} alt={u.name || ""} className="object-cover" />
+                          ) : null}
                           <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">
                             {initials}
                           </AvatarFallback>
@@ -414,6 +417,9 @@ export default function Collaborators() {
               {/* User Info */}
               <div className="flex items-center gap-3 mb-4">
                 <Avatar className="h-12 w-12 border-2 border-primary/20">
+                  {(collab as any).avatarUrl ? (
+                    <AvatarImage src={(collab as any).avatarUrl} alt={collab.name || ""} className="object-cover" />
+                  ) : null}
                   <AvatarFallback className="text-sm font-bold bg-primary/15 text-primary">
                     {initials}
                   </AvatarFallback>

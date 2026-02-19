@@ -1,15 +1,16 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Trophy, Zap, Target, Clock, TrendingUp, Crown,
-  Star, Plus, Minus, Loader2,
+  Star, Plus, Minus, Loader2, History, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -46,7 +47,6 @@ export default function Ranking() {
       {/* Top 3 Podium */}
       {top3.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Reorder: 2nd, 1st, 3rd for podium effect */}
           {[top3[1], top3[0], top3[2]].filter(Boolean).map((r, displayIdx) => {
             if (!r) return null;
             const actualIdx = displayIdx === 0 ? 1 : displayIdx === 1 ? 0 : 2;
@@ -78,6 +78,9 @@ export default function Ranking() {
                 )}
                 <div className="text-3xl mb-2">{medals[actualIdx]}</div>
                 <Avatar className="h-14 w-14 mx-auto mb-2">
+                  {(r as any).avatarUrl ? (
+                    <AvatarImage src={(r as any).avatarUrl} alt={r.name || ""} className="object-cover" />
+                  ) : null}
                   <AvatarFallback className={`text-lg font-bold ${isFirst ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"}`}>
                     {r.name?.charAt(0)?.toUpperCase() ?? "?"}
                   </AvatarFallback>
@@ -130,6 +133,9 @@ export default function Ranking() {
                     {i + 4}º
                   </span>
                   <Avatar className="h-9 w-9 shrink-0">
+                    {(r as any).avatarUrl ? (
+                      <AvatarImage src={(r as any).avatarUrl} alt={r.name || ""} className="object-cover" />
+                    ) : null}
                     <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
                       {r.name?.charAt(0)?.toUpperCase() ?? "?"}
                     </AvatarFallback>
@@ -187,19 +193,33 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
   const [pointsAmount, setPointsAmount] = useState("");
   const [reason, setReason] = useState("");
   const [isPositive, setIsPositive] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Fetch points history for selected user
+  const { data: pointsHistory } = trpc.gamification.userPoints.useQuery(
+    { userId: selectedUser as number },
+    { enabled: !!selectedUser && showHistory }
+  );
+
+  // Fetch user badges for selected user
+  const { data: userBadges } = trpc.gamification.userBadges.useQuery(
+    { userId: selectedUser as number },
+    { enabled: !!selectedUser }
+  );
 
   const adjustMutation = trpc.gamification.adjustPoints.useMutation({
     onSuccess: (data) => {
       const badges = data.newBadges;
       toast.success(
-        `Pontos ${isPositive ? "concedidos" : "removidos"}!` +
-        (badges?.length ? ` Novos badges: ${badges.join(", ")}` : "")
+        `Pontos ${isPositive ? "concedidos" : "removidos"} com sucesso!` +
+        (badges?.length ? ` Nova(s) conquista(s): ${badges.join(", ")}` : "")
       );
       utils.gamification.ranking.invalidate();
+      utils.gamification.userPoints.invalidate();
+      utils.gamification.userBadges.invalidate();
       utils.collaborators.listWithStats.invalidate();
       setPointsAmount("");
       setReason("");
-      setSelectedUser("");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -207,7 +227,14 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const pts = parseInt(pointsAmount);
-    if (!selectedUser || !pts || !reason.trim()) return;
+    if (!selectedUser || !pts || !reason.trim()) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    if (pts <= 0) {
+      toast.error("A quantidade de pontos deve ser maior que zero");
+      return;
+    }
     adjustMutation.mutate({
       userId: selectedUser as number,
       points: isPositive ? pts : -pts,
@@ -215,60 +242,220 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
     });
   };
 
+  const selectedUserData = ranking.find(r => r.id === selectedUser);
+  const quickAmounts = [5, 10, 25, 50, 100, 250];
+  const quickReasons = [
+    "Entrega excepcional",
+    "Proatividade",
+    "Trabalho em equipe",
+    "Meta atingida",
+    "Pontualidade",
+    "Bônus especial",
+  ];
+
   return (
     <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.75 0.18 50)" } as React.CSSProperties}>
       <h2 className="text-base font-semibold flex items-center gap-2 mb-1">
         <Star className="h-5 w-5 text-amber-400" />
         Gerenciar Pontos
       </h2>
-      <p className="text-sm text-muted-foreground mb-4">Conceda ou remova pontos dos colaboradores.</p>
+      <p className="text-sm text-muted-foreground mb-4">Conceda ou remova pontos dos colaboradores de forma detalhada.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Colaborador</Label>
-            <select
-              value={selectedUser}
-              onChange={e => setSelectedUser(e.target.value ? parseInt(e.target.value) : "")}
-              required
-              className="w-full h-9 px-3 rounded-md border border-border/30 bg-muted/10 text-sm text-foreground"
-            >
-              <option value="">Selecione...</option>
-              {ranking.map(r => (
-                <option key={r.id} value={r.id}>{r.name} ({r.totalPoints} pts)</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Quantidade</Label>
-            <Input type="number" min="1" max="10000" placeholder="Ex: 50" value={pointsAmount} onChange={e => setPointsAmount(e.target.value)} required className="bg-muted/10 border-border/30" />
-          </div>
+        {/* Colaborador Selection */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Colaborador *</Label>
+          <select
+            value={selectedUser}
+            onChange={e => setSelectedUser(e.target.value ? parseInt(e.target.value) : "")}
+            required
+            className="w-full h-10 px-3 rounded-lg border border-border/30 bg-muted/10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Selecione um colaborador...</option>
+            {ranking.map(r => (
+              <option key={r.id} value={r.id}>{r.name ?? "Sem nome"} — {r.totalPoints} pts</option>
+            ))}
+          </select>
         </div>
 
+        {/* Selected user info card */}
+        {selectedUserData && (
+          <div className="rounded-lg bg-muted/10 p-3 flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              {(selectedUserData as any).avatarUrl ? (
+                <AvatarImage src={(selectedUserData as any).avatarUrl} alt={selectedUserData.name || ""} className="object-cover" />
+              ) : null}
+              <AvatarFallback className="text-sm font-bold bg-primary/20 text-primary">
+                {selectedUserData.name?.charAt(0)?.toUpperCase() ?? "?"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <p className="text-sm font-medium">{selectedUserData.name}</p>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Zap className="h-3 w-3 text-amber-400" />
+                <span className="font-bold text-foreground">{selectedUserData.totalPoints}</span> pontos atuais
+              </div>
+            </div>
+            {userBadges && userBadges.length > 0 && (
+              <div className="flex gap-0.5">
+                {userBadges.slice(0, 5).map((b: any) => (
+                  <span key={b.id} className="text-lg" title={b.name}>{b.icon}</span>
+                ))}
+                {userBadges.length > 5 && (
+                  <span className="text-xs text-muted-foreground self-center ml-1">+{userBadges.length - 5}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tipo (Conceder/Remover) */}
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium">Tipo</Label>
+          <Label className="text-xs font-medium">Ação *</Label>
           <div className="flex gap-2">
             <button type="button" onClick={() => setIsPositive(true)}
-              className={`flex-1 h-9 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${isPositive ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30" : "bg-muted/10 text-muted-foreground border border-border/30"}`}>
-              <Plus className="h-3.5 w-3.5" /> Conceder
+              className={`flex-1 h-10 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${isPositive ? "bg-emerald-500/20 text-emerald-500 border-2 border-emerald-500/40 shadow-sm" : "bg-muted/10 text-muted-foreground border border-border/30 hover:bg-muted/20"}`}>
+              <Plus className="h-4 w-4" /> Conceder Pontos
             </button>
             <button type="button" onClick={() => setIsPositive(false)}
-              className={`flex-1 h-9 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 transition-colors ${!isPositive ? "bg-red-500/20 text-red-500 border border-red-500/30" : "bg-muted/10 text-muted-foreground border border-border/30"}`}>
-              <Minus className="h-3.5 w-3.5" /> Remover
+              className={`flex-1 h-10 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${!isPositive ? "bg-red-500/20 text-red-500 border-2 border-red-500/40 shadow-sm" : "bg-muted/10 text-muted-foreground border border-border/30 hover:bg-muted/20"}`}>
+              <Minus className="h-4 w-4" /> Remover Pontos
             </button>
           </div>
         </div>
 
+        {/* Quantidade com quick buttons */}
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium">Motivo</Label>
-          <Input placeholder="Ex: Entrega excepcional do projeto X" value={reason} onChange={e => setReason(e.target.value)} required className="bg-muted/10 border-border/30" />
+          <Label className="text-xs font-medium">Quantidade de Pontos *</Label>
+          <Input
+            type="number"
+            min="1"
+            max="10000"
+            placeholder="Digite a quantidade..."
+            value={pointsAmount}
+            onChange={e => setPointsAmount(e.target.value)}
+            required
+            className="bg-muted/10 border-border/30 h-10 text-center text-lg font-bold"
+          />
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {quickAmounts.map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPointsAmount(v.toString())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  pointsAmount === v.toString()
+                    ? isPositive
+                      ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30"
+                      : "bg-red-500/20 text-red-500 border border-red-500/30"
+                    : "bg-muted/10 text-muted-foreground border border-border/30 hover:bg-muted/20"
+                }`}
+              >
+                {v} pts
+              </button>
+            ))}
+          </div>
         </div>
 
-        <Button type="submit" disabled={adjustMutation.isPending} className="gap-2">
+        {/* Motivo com quick reasons */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Motivo *</Label>
+          <Input
+            placeholder="Descreva o motivo da alteração de pontos..."
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            required
+            className="bg-muted/10 border-border/30 h-10"
+          />
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {quickReasons.map(r => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setReason(r)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${
+                  reason === r
+                    ? "bg-primary/20 text-primary border border-primary/30"
+                    : "bg-muted/10 text-muted-foreground border border-border/30 hover:bg-muted/20"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview */}
+        {selectedUserData && pointsAmount && reason && (
+          <div className={`rounded-lg p-3 text-sm ${isPositive ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-red-500/10 border border-red-500/20"}`}>
+            <p className={isPositive ? "text-emerald-500" : "text-red-500"}>
+              {isPositive ? "+" : "-"}{pointsAmount} pontos para <strong>{selectedUserData.name}</strong>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Motivo: {reason} — Novo total: {selectedUserData.totalPoints + (isPositive ? parseInt(pointsAmount) || 0 : -(parseInt(pointsAmount) || 0))} pts
+            </p>
+          </div>
+        )}
+
+        <Button type="submit" disabled={adjustMutation.isPending || !selectedUser || !pointsAmount || !reason.trim()} className="gap-2 w-full h-10">
           {adjustMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
           {isPositive ? "Conceder Pontos" : "Remover Pontos"}
         </Button>
       </form>
+
+      {/* Points History Toggle */}
+      {selectedUser && (
+        <>
+          <Separator className="my-4 bg-border/20" />
+          <button
+            type="button"
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            <History className="h-4 w-4" />
+            <span className="font-medium">Histórico de Pontos</span>
+            {showHistory ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+          </button>
+
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 space-y-1.5 max-h-[300px] overflow-y-auto">
+                  {pointsHistory && pointsHistory.length > 0 ? (
+                    pointsHistory.map((entry: any) => (
+                      <div key={entry.id} className="flex items-center gap-3 rounded-lg bg-muted/10 px-3 py-2">
+                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          entry.points > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                        }`}>
+                          {entry.points > 0 ? <Plus className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{entry.reason}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(entry.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                            {" "}
+                            {new Date(entry.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                        <span className={`text-sm font-bold shrink-0 ${entry.points > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {entry.points > 0 ? "+" : ""}{entry.points}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4">Nenhum registro de pontos encontrado.</p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

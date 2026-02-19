@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +132,9 @@ export default function Cadastros() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar className="h-9 w-9 shrink-0 border border-primary/20">
+                    {(collab as any).avatarUrl ? (
+                      <AvatarImage src={(collab as any).avatarUrl} alt={collab.name || ""} className="object-cover" />
+                    ) : null}
                     <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">
                       {initials}
                     </AvatarFallback>

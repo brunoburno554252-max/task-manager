@@ -10,6 +10,7 @@ export const users = sqliteTable("users", {
   role: text("role", { enum: ["user", "admin"] }).default("user").notNull(),
   passwordHash: text("passwordHash"),
   totalPoints: integer("totalPoints").default(0).notNull(),
+  avatarUrl: text("avatarUrl"),
   createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
   lastSignedIn: text("lastSignedIn").notNull().$defaultFn(() => new Date().toISOString()),
@@ -97,6 +98,7 @@ export type InsertTaskComment = typeof taskComments.$inferInsert;
 export const chatMessages = sqliteTable("chat_messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("userId").notNull(),
+  companyId: integer("companyId"),
   content: text("content").notNull(),
   createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
 });

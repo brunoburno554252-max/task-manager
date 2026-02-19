@@ -78,6 +78,7 @@ export async function getAllUsers(db: DrizzleD1Database) {
     email: users.email,
     role: users.role,
     totalPoints: users.totalPoints,
+    avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
   }).from(users).orderBy(desc(users.totalPoints));
 }
@@ -92,6 +93,7 @@ export async function updateUser(db: DrizzleD1Database, id: number, data: Partia
   email: string | null;
   phone: string | null;
   role: "user" | "admin";
+  avatarUrl: string | null;
 }>) {
   await db.update(users).set({ ...data, updatedAt: new Date().toISOString() }).where(eq(users.id, id));
 }
@@ -106,6 +108,7 @@ export async function createTask(db: DrizzleD1Database, data: {
   createdById: number;
   dueDate?: number;
   companyId?: number;
+  pointsReward?: number;
 }) {
   const now = new Date().toISOString();
   const result = await db.insert(tasks).values({
@@ -117,7 +120,7 @@ export async function createTask(db: DrizzleD1Database, data: {
     createdById: data.createdById,
     dueDate: data.dueDate ?? null,
     companyId: data.companyId ?? null,
-    pointsAwarded: 0,
+    pointsAwarded: data.pointsReward ?? 0,
     createdAt: now,
     updatedAt: now,
   }).returning({ id: tasks.id });
@@ -228,6 +231,7 @@ export async function getRanking(db: DrizzleD1Database) {
     email: users.email,
     role: users.role,
     totalPoints: users.totalPoints,
+    avatarUrl: users.avatarUrl,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
     onTimeTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed' AND (tasks.dueDate IS NULL OR tasks.completedAt <= tasks.dueDate))`,
     totalAssigned: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id)`,
@@ -459,6 +463,7 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
     phone: users.phone,
     role: users.role,
     totalPoints: users.totalPoints,
+    avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'in_progress')`,
@@ -478,6 +483,7 @@ export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, 
     phone: users.phone,
     role: users.role,
     totalPoints: users.totalPoints,
+    avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
@@ -490,21 +496,32 @@ export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, 
 
 // ============ CHAT ============
 
-export async function sendChatMessage(db: DrizzleD1Database, userId: number, content: string) {
-  const result = await db.insert(chatMessages).values({ userId, content }).returning({ id: chatMessages.id });
+export async function sendChatMessage(db: DrizzleD1Database, userId: number, content: string, companyId?: number) {
+  const result = await db.insert(chatMessages).values({ userId, content, companyId: companyId ?? null }).returning({ id: chatMessages.id });
   return { id: result[0].id };
 }
 
-export async function getChatMessages(db: DrizzleD1Database, limit: number = 100, beforeId?: number) {
-  const conditions = beforeId ? [sql`${chatMessages.id} < ${beforeId}`] : [];
+export async function getChatMessages(db: DrizzleD1Database, limit: number = 100, beforeId?: number, companyId?: number) {
+  const conditions: any[] = [];
+  if (beforeId) conditions.push(sql`${chatMessages.id} < ${beforeId}`);
+  if (companyId !== undefined) {
+    if (companyId === 0) {
+      // General chat (no company)
+      conditions.push(sql`${chatMessages.companyId} IS NULL`);
+    } else {
+      conditions.push(eq(chatMessages.companyId, companyId));
+    }
+  }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   return db.select({
     id: chatMessages.id,
     userId: chatMessages.userId,
+    companyId: chatMessages.companyId,
     content: chatMessages.content,
     createdAt: chatMessages.createdAt,
     userName: users.name,
     userRole: users.role,
+    userAvatarUrl: users.avatarUrl,
   }).from(chatMessages)
     .leftJoin(users, eq(chatMessages.userId, users.id))
     .where(where)
@@ -719,6 +736,7 @@ export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, co
     phone: users.phone,
     role: users.role,
     totalPoints: users.totalPoints,
+    avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,

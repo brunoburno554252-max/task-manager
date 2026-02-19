@@ -65,11 +65,9 @@ export function LoginPage() {
       <div className="relative flex flex-col items-center gap-6 p-10 max-w-md w-full">
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center">
-              <Zap className="h-6 w-6 text-primary" />
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-14 w-14 object-contain" />
             <span className="text-3xl font-bold tracking-tight gradient-text">
-              TaskFlow
+              Agenda do CEO
             </span>
           </div>
           <h1 className="text-xl font-semibold tracking-tight text-center text-foreground">
@@ -78,7 +76,7 @@ export function LoginPage() {
           <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed">
             {isLogin
               ? "Faça login para acessar o painel de gestão de tarefas."
-              : "Crie sua conta para começar a usar o TaskFlow."}
+              : "Crie sua conta para começar a usar a Agenda do CEO."}
           </p>
         </div>
 

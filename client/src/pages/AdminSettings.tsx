@@ -46,7 +46,7 @@ export default function AdminSettings() {
           Configurações
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Gerencie as configurações do sistema TaskFlow.
+          Gerencie as configurações do sistema Agenda do CEO.
         </p>
       </div>
 
@@ -123,7 +123,7 @@ export default function AdminSettings() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg bg-muted/10 p-3">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Versão</p>
-            <p className="font-medium">TaskFlow v13</p>
+            <p className="font-medium">Agenda do CEO v14</p>
           </div>
           <div className="rounded-lg bg-muted/10 p-3">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Stack</p>

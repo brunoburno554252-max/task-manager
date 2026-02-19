@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   ArrowDown, Search, X, MessageSquare, History, Send,
   Columns3, LayoutGrid, List, Eye, ChevronRight,
   ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
-  ChevronLeft,
+  ChevronLeft, Pencil,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -42,7 +42,7 @@ import confetti from "canvas-confetti";
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "completed";
 type Priority = "low" | "medium" | "high" | "urgent";
-type ViewMode = "tabs" | "kanban" | "list" | "simple" | "agenda";
+type ViewMode = "tabs" | "kanban" | "list" | "agenda";
 
 type TaskItem = {
   id: number;
@@ -77,11 +77,10 @@ const priorityConfig: Record<Priority, { label: string; icon: React.ElementType;
 const statusOrder: TaskStatus[] = ["pending", "in_progress", "completed"];
 
 const viewModes: { key: ViewMode; label: string; icon: React.ElementType; desc: string }[] = [
-  { key: "simple", label: "Simples", icon: Eye, desc: "Visualização clara e fácil" },
-  { key: "list", label: "Lista", icon: List, desc: "Tabela compacta" },
-  { key: "tabs", label: "Abas", icon: LayoutGrid, desc: "Cards por status" },
   { key: "kanban", label: "Kanban", icon: Columns3, desc: "Colunas arrastáveis" },
   { key: "agenda", label: "Agenda", icon: Calendar, desc: "Calendário mensal" },
+  { key: "list", label: "Lista", icon: List, desc: "Tabela compacta" },
+  { key: "tabs", label: "Abas", icon: LayoutGrid, desc: "Cards por status" },
 ];
 
 // ==================== SORTABLE CARD ====================
@@ -284,7 +283,7 @@ export default function CollaboratorKanban() {
   const [, setLocation] = useLocation();
   const { data: company } = trpc.companies.getById.useQuery({ id: companyId! }, { enabled: !!companyId });
 
-  const [viewMode, setViewMode] = useState<ViewMode>("simple");
+  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [agendaDate, setAgendaDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState<TaskStatus>("pending");
   const [search, setSearch] = useState("");
@@ -307,6 +306,7 @@ export default function CollaboratorKanban() {
   const [newChecklistItems, setNewChecklistItems] = useState<string[]>([]);
   const [newChecklistInput, setNewChecklistInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{file: globalThis.File; preview?: string}[]>([]);
+  const [newPointsReward, setNewPointsReward] = useState<number>(10);
 
   // Checklist inline add state (detail panel)
   const [inlineChecklistInput, setInlineChecklistInput] = useState("");
@@ -350,7 +350,7 @@ export default function CollaboratorKanban() {
       setShowCreateDialog(false);
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewDueDate("");
       setNewChecklistItems([]); setNewChecklistInput("");
-      setPendingAttachments([]);
+      setPendingAttachments([]); setNewPointsReward(10);
       toast.success("Tarefa criada com sucesso!");
     },
     onError: (err) => toast.error(err.message),
@@ -391,6 +391,15 @@ export default function CollaboratorKanban() {
       utils.collaborators.listWithStats.invalidate();
       setSelectedTask(null);
       toast.success("Tarefa excluída!");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateMutation = trpc.tasks.update.useMutation({
+    onSuccess: () => {
+      utils.tasks.list.invalidate();
+      utils.tasks.getById.invalidate();
+      toast.success("Tarefa atualizada!");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -771,7 +780,7 @@ export default function CollaboratorKanban() {
               </div>
             </div>
 
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-y-auto">
               <div className="p-5 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-muted/10 p-3">
@@ -781,10 +790,25 @@ export default function CollaboratorKanban() {
                     </div>
                   </div>
                   <div className="rounded-lg bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Prazo</p>
-                    <div className="flex items-center gap-1.5 text-sm">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                      Prazo <Pencil className="h-3 w-3 text-muted-foreground/50" />
+                    </p>
+                    <div className="flex items-center gap-1.5">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString("pt-BR") : "Sem prazo"}
+                      <input type="date"
+                        value={task.dueDate ? (() => {
+                          const d = new Date(task.dueDate);
+                          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                        })() : ''}
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            const [y, m, d] = e.target.value.split('-').map(Number);
+                            const localDate = new Date(y, m - 1, d, 12, 0, 0);
+                            updateMutation.mutate({ id: task.id, dueDate: localDate.getTime() });
+                          }
+                        }}
+                        className="text-sm bg-transparent border-none outline-none cursor-pointer w-full"
+                      />
                     </div>
                   </div>
                   <div className="rounded-lg bg-muted/10 p-3">
@@ -833,7 +857,7 @@ export default function CollaboratorKanban() {
                         <Checkbox
                           checked={!!item.isCompleted}
                           onCheckedChange={(checked) => {
-                            updateChecklistMutation.mutate({ id: item.id, isCompleted: !!checked });
+                            updateChecklistMutation.mutate({ id: item.id, isCompleted: checked ? 1 : 0 });
                           }}
                           className="shrink-0"
                         />
@@ -1041,7 +1065,7 @@ export default function CollaboratorKanban() {
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           </motion.div>
         </motion.div>
       </AnimatePresence>
@@ -1070,6 +1094,9 @@ export default function CollaboratorKanban() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Avatar className="h-12 w-12 border-2 border-primary/20">
+          {(collabUser as any)?.avatarUrl ? (
+            <AvatarImage src={(collabUser as any).avatarUrl} alt={collabUser?.name || ""} className="object-cover" />
+          ) : null}
           <AvatarFallback className="text-sm font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
@@ -1173,38 +1200,6 @@ export default function CollaboratorKanban() {
           </Button>
         )}
       </div>
-
-      {/* ==================== SIMPLE VIEW ==================== */}
-      {viewMode === "simple" && (
-        <div className="space-y-6">
-          {statusOrder.map(status => {
-            const cfg = statusConfig[status];
-            const statusTasks = rawTasksByStatus[status];
-            if (statusTasks.length === 0) return null;
-            return (
-              <div key={status}>
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className={`h-3 w-3 rounded-full ${cfg.dotColor}`} />
-                  <h2 className="text-lg font-bold">{cfg.label}</h2>
-                  <span className="text-sm text-muted-foreground">({statusTasks.length})</span>
-                </div>
-                <div className="space-y-3">
-                  {statusTasks.map(task => (
-                    <SimpleTaskCard key={task.id} task={task} onClick={() => setSelectedTask(task)}
-                      onStatusChange={handleQuickStatusChange} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          {filteredTasks.length === 0 && (
-            <div className="text-center py-20">
-              <Eye className="h-16 w-16 text-muted-foreground/20 mx-auto mb-4" />
-              <p className="text-lg text-muted-foreground">Nenhuma tarefa encontrada</p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ==================== LIST VIEW ==================== */}
       {viewMode === "list" && (
@@ -1378,8 +1373,65 @@ export default function CollaboratorKanban() {
       )}
 
       {/* ===== AGENDA VIEW ===== */}
-      {viewMode === "agenda" && (
+      {viewMode === "agenda" && (() => {
+        const now = new Date();
+        const monthTasks = filteredTasks.filter(t => {
+          if (!t.dueDate) return false;
+          const d = new Date(t.dueDate);
+          return d.getMonth() === agendaDate.getMonth() && d.getFullYear() === agendaDate.getFullYear();
+        });
+        const monthPending = monthTasks.filter(t => t.status === "pending").length;
+        const monthInProgress = monthTasks.filter(t => t.status === "in_progress").length;
+        const monthCompleted = monthTasks.filter(t => t.status === "completed").length;
+        const monthOverdue = monthTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime()).length;
+        const noDueDateTasks = filteredTasks.filter(t => !t.dueDate);
+        const upcomingTasks = filteredTasks.filter(t => {
+          if (!t.dueDate || t.status === "completed") return false;
+          const d = new Date(t.dueDate);
+          const diff = d.getTime() - now.getTime();
+          return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
+        });
+
+        return (
         <div className="space-y-4">
+          {/* Month Stats Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="rounded-xl bg-card/80 border border-border/30 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pendentes</p>
+              <p className="text-xl font-bold text-orange-400">{monthPending}</p>
+            </div>
+            <div className="rounded-xl bg-card/80 border border-border/30 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Em Andamento</p>
+              <p className="text-xl font-bold text-blue-400">{monthInProgress}</p>
+            </div>
+            <div className="rounded-xl bg-card/80 border border-border/30 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Concluídas</p>
+              <p className="text-xl font-bold text-emerald-400">{monthCompleted}</p>
+            </div>
+            <div className="rounded-xl bg-card/80 border border-border/30 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Atrasadas</p>
+              <p className={`text-xl font-bold ${monthOverdue > 0 ? "text-red-400" : "text-muted-foreground"}`}>{monthOverdue}</p>
+            </div>
+          </div>
+
+          {/* Upcoming deadline alert */}
+          {upcomingTasks.length > 0 && (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 flex items-start gap-2">
+              <Flame className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-400">Prazos próximos (3 dias)</p>
+                <div className="mt-1 space-y-0.5">
+                  {upcomingTasks.slice(0, 5).map(t => (
+                    <p key={t.id} className="text-xs text-foreground/80 cursor-pointer hover:text-primary transition-colors" onClick={() => setSelectedTask(t)}>
+                      {t.title} — {t.dueDate ? new Date(t.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : ""}
+                    </p>
+                  ))}
+                  {upcomingTasks.length > 5 && <p className="text-[10px] text-muted-foreground">+{upcomingTasks.length - 5} mais</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Calendar Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1399,7 +1451,7 @@ export default function CollaboratorKanban() {
                 Hoje
               </button>
             </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Pendente</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Em Andamento</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Concluída</span>
@@ -1419,11 +1471,12 @@ export default function CollaboratorKanban() {
               {calendarDays.map((day, idx) => {
                 const dateKey = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
                 const dayTasks = tasksByDate[dateKey] || [];
+                const hasOverdue = dayTasks.some(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime());
                 return (
                   <div key={idx} className={`min-h-[100px] p-1.5 border-b border-r border-border/10 transition-colors ${
                     !day.isCurrentMonth ? "bg-muted/5 opacity-40" : ""
-                  } ${day.isToday ? "bg-primary/5" : ""}`}>
-                    <div className={`text-xs font-medium mb-1 px-1 ${
+                  } ${day.isToday ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""} ${hasOverdue && day.isCurrentMonth ? "bg-red-500/5" : ""}`}>
+                    <div className={`text-xs font-medium mb-1 px-1 flex items-center gap-1 ${
                       day.isToday ? "text-primary font-bold" : day.isCurrentMonth ? "text-foreground" : "text-muted-foreground"
                     }`}>
                       {day.isToday ? (
@@ -1431,19 +1484,26 @@ export default function CollaboratorKanban() {
                           {day.date.getDate()}
                         </span>
                       ) : day.date.getDate()}
+                      {dayTasks.length > 0 && day.isCurrentMonth && (
+                        <span className="text-[9px] text-muted-foreground ml-auto">{dayTasks.length}</span>
+                      )}
                     </div>
                     <div className="space-y-0.5">
-                      {dayTasks.slice(0, 3).map(task => (
-                        <div key={task.id} onClick={() => setSelectedTask(task)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] leading-tight cursor-pointer border transition-all hover:scale-[1.02] ${
-                            task.status === "pending" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
-                            task.status === "in_progress" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
-                            "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                          }`}
-                          title={`${task.title} (${priorityConfig[task.priority].label})`}>
-                          <span className="truncate font-medium block">{task.title}</span>
-                        </div>
-                      ))}
+                      {dayTasks.slice(0, 3).map(task => {
+                        const isOverdue = task.status !== "completed" && task.dueDate && task.dueDate < now.getTime();
+                        return (
+                          <div key={task.id} onClick={() => setSelectedTask(task)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] leading-tight cursor-pointer border transition-all hover:scale-[1.02] ${
+                              isOverdue ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                              task.status === "pending" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
+                              task.status === "in_progress" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
+                              "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                            }`}
+                            title={`${task.title} (${priorityConfig[task.priority].label})${isOverdue ? " - ATRASADA" : ""}`}>
+                            <span className="truncate font-medium block">{task.title}</span>
+                          </div>
+                        );
+                      })}
                       {dayTasks.length > 3 && (
                         <div className="text-[10px] text-muted-foreground px-1 font-medium">+{dayTasks.length - 3} mais</div>
                       )}
@@ -1458,6 +1518,7 @@ export default function CollaboratorKanban() {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Calendar className="h-4 w-4" /> Tarefas do mês
+              <span className="text-[10px] font-normal">({monthTasks.length} tarefas)</span>
             </h3>
             {agendaListItems.length === 0 ? (
               <div className="text-center py-12 rounded-xl bg-card/80 border border-border/30">
@@ -1470,32 +1531,47 @@ export default function CollaboratorKanban() {
                   <div className="px-4 py-2.5 bg-muted/20 border-b border-border/30 flex items-center gap-2">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{item.dateLabel}</span>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{item.tasks.length}</Badge>
+                    {item.date !== "no-date" && item.tasks.some(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime()) && (
+                      <span className="text-[10px] text-red-400 font-medium ml-auto flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> Atrasada
+                      </span>
+                    )}
                   </div>
                   <div className="divide-y divide-border/10">
                     {item.tasks.map(task => {
                       const sc = statusConfig[task.status];
                       const pc = priorityConfig[task.priority];
                       const PIcon = pc.icon;
+                      const isOverdue = task.status !== "completed" && task.dueDate && task.dueDate < now.getTime();
                       return (
                         <div key={task.id} onClick={() => setSelectedTask(task)}
-                          className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer">
-                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${sc.dotColor}`} />
+                          className={`flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer ${isOverdue ? "bg-red-500/5" : ""}`}>
+                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${isOverdue ? "bg-red-500 animate-pulse" : sc.dotColor}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium truncate">{task.title}</span>
                               <PIcon className={`h-3 w-3 shrink-0 ${pc.color}`} />
+                              {isOverdue && <span className="text-[9px] text-red-400 font-medium shrink-0">ATRASADA</span>}
                             </div>
                             {task.description && (
                               <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
                             )}
                           </div>
-                          <Badge variant="outline" className={`text-[10px] shrink-0 ${
-                            task.status === "pending" ? "border-orange-500/30 text-orange-400" :
-                            task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
-                            "border-emerald-500/30 text-emerald-400"
-                          }`}>
-                            {sc.label}
-                          </Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {task.pointsAwarded > 0 && (
+                              <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                                <Zap className="h-2.5 w-2.5" />{task.pointsAwarded}
+                              </span>
+                            )}
+                            <Badge variant="outline" className={`text-[10px] ${
+                              isOverdue ? "border-red-500/30 text-red-400" :
+                              task.status === "pending" ? "border-orange-500/30 text-orange-400" :
+                              task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
+                              "border-emerald-500/30 text-emerald-400"
+                            }`}>
+                              {sc.label}
+                            </Badge>
+                          </div>
                         </div>
                       );
                     })}
@@ -1503,9 +1579,46 @@ export default function CollaboratorKanban() {
                 </div>
               ))
             )}
+
+            {/* Tasks without due date */}
+            {noDueDateTasks.length > 0 && (
+              <div className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
+                <div className="px-4 py-2.5 bg-muted/20 border-b border-border/30 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sem prazo definido</span>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{noDueDateTasks.length}</Badge>
+                </div>
+                <div className="divide-y divide-border/10">
+                  {noDueDateTasks.map(task => {
+                    const sc = statusConfig[task.status];
+                    const pc = priorityConfig[task.priority];
+                    const PIcon = pc.icon;
+                    return (
+                      <div key={task.id} onClick={() => setSelectedTask(task)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer">
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${sc.dotColor}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{task.title}</span>
+                            <PIcon className={`h-3 w-3 shrink-0 ${pc.color}`} />
+                          </div>
+                        </div>
+                        <Badge variant="outline" className={`text-[10px] shrink-0 ${
+                          task.status === "pending" ? "border-orange-500/30 text-orange-400" :
+                          task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
+                          "border-emerald-500/30 text-emerald-400"
+                        }`}>
+                          {sc.label}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -1549,6 +1662,24 @@ export default function CollaboratorKanban() {
                 <Label className="text-xs font-medium">Prazo</Label>
                 <Input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
                   className="mt-1 bg-muted/10 border-border/20" />
+              </div>
+            </div>
+
+            {/* Pontos */}
+            <div>
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 text-amber-500" /> Pontos ao Concluir
+              </Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">Quantos pontos o colaborador ganha ao concluir esta tarefa</p>
+              <div className="flex items-center gap-3">
+                <Input type="number" min={0} max={1000} value={newPointsReward} onChange={e => setNewPointsReward(Number(e.target.value))}
+                  className="w-24 bg-muted/10 border-border/20 text-center font-bold" />
+                <div className="flex gap-1">
+                  {[5, 10, 25, 50, 100].map(v => (
+                    <Button key={v} type="button" variant={newPointsReward === v ? "default" : "outline"} size="sm"
+                      className="h-7 px-2 text-xs" onClick={() => setNewPointsReward(v)}>{v}</Button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1681,8 +1812,9 @@ export default function CollaboratorKanban() {
                 description: newDesc.trim() || undefined,
                 priority: newPriority,
                 assigneeId: userId,
-                dueDate: newDueDate ? new Date(newDueDate).getTime() : undefined,
+                dueDate: newDueDate ? (() => { const [y,m,d] = newDueDate.split('-').map(Number); return new Date(y, m-1, d, 12, 0, 0).getTime(); })() : undefined,
                 companyId: companyId || undefined,
+                pointsReward: newPointsReward || undefined,
                 checklistItems: newChecklistItems.length > 0 ? newChecklistItems.map((t, i) => ({ title: t, sortOrder: i })) : undefined,
               }, {
                 onSuccess: (result: any) => {

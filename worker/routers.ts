@@ -51,10 +51,21 @@ export const appRouter = router({
         email: z.string().email().max(320).optional(),
         phone: z.string().max(20).optional().nullable(),
         role: z.enum(["user", "admin"]).optional(),
+        password: z.string().min(6).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { id, ...data } = input;
-        await updateUser(ctx.db, id, data as any);
+        const { id, password, ...data } = input;
+        // If password provided, hash it
+        if (password) {
+          const encoder = new TextEncoder();
+          const passData = encoder.encode(password);
+          const hashBuffer = await crypto.subtle.digest("SHA-256", passData);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const passwordHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+          await updateUser(ctx.db, id, { ...data, passwordHash } as any);
+        } else {
+          await updateUser(ctx.db, id, data as any);
+        }
         await logActivity(ctx.db, {
           userId: ctx.user.id,
           action: "updated",
@@ -68,6 +79,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(1).max(255).optional(),
         phone: z.string().max(20).optional().nullable(),
+        avatarUrl: z.string().max(500000).optional().nullable(),
       }))
       .mutation(async ({ ctx, input }) => {
         await updateUser(ctx.db, ctx.user.id, input as any);
@@ -145,15 +157,17 @@ export const appRouter = router({
         assigneeId: z.number().optional(),
         dueDate: z.number().optional(),
         companyId: z.number().optional(),
+        pointsReward: z.number().optional(),
         checklistItems: z.array(z.object({
           title: z.string().min(1).max(500),
         })).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { checklistItems: items, ...taskData } = input;
+        const { checklistItems: items, pointsReward, ...taskData } = input;
         const result = await createTask(ctx.db, {
           ...taskData,
           createdById: ctx.user.id,
+          pointsReward,
         });
         // Create checklist items if provided
         if (items && items.length > 0) {
@@ -542,14 +556,18 @@ export const appRouter = router({
       .input(z.object({
         limit: z.number().optional(),
         beforeId: z.number().optional(),
+        companyId: z.number().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        return getChatMessages(ctx.db, input?.limit ?? 100, input?.beforeId);
+        return getChatMessages(ctx.db, input?.limit ?? 100, input?.beforeId, input?.companyId);
       }),
     send: protectedProcedure
-      .input(z.object({ content: z.string().min(1).max(5000) }))
+      .input(z.object({
+        content: z.string().min(1).max(5000),
+        companyId: z.number().optional(),
+      }))
       .mutation(async ({ ctx, input }) => {
-        return sendChatMessage(ctx.db, ctx.user.id, input.content);
+        return sendChatMessage(ctx.db, ctx.user.id, input.content, input.companyId || undefined);
       }),
   }),
 
