@@ -38,6 +38,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import confetti from "canvas-confetti";
+import { RichTextEditor, RichTextViewer } from "@/components/RichTextEditor";
 
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "completed";
@@ -152,7 +153,7 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
         <span className="text-[10px] text-muted-foreground font-mono">#{task.id}</span>
       </div>
       <h4 className="font-medium text-sm leading-snug mb-1 line-clamp-2 group-hover:text-primary transition-colors">{task.title}</h4>
-      {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{task.description}</p>}
+      {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-2" dangerouslySetInnerHTML={{ __html: task.description.replace(/<[^>]*>/g, ' ').substring(0, 100) }} />}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-border/15">
         <div className="flex items-center gap-2">
           {task.dueDate ? (
@@ -243,7 +244,7 @@ function SimpleTaskCard({ task, onClick, onStatusChange }: {
       <h3 className="text-lg font-bold leading-snug mb-2">{task.title}</h3>
 
       {task.description && (
-        <p className="text-base text-muted-foreground leading-relaxed mb-3 line-clamp-2">{task.description}</p>
+        <div className="text-base text-muted-foreground leading-relaxed mb-3 line-clamp-2" dangerouslySetInnerHTML={{ __html: task.description.replace(/<[^>]*>/g, ' ').substring(0, 200) }} />
       )}
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/20">
@@ -778,7 +779,22 @@ export default function CollaboratorKanban() {
                   </Button>
                 </div>
               </div>
-              <h2 className="text-xl font-bold mb-3">{task.title}</h2>
+              {isAdmin ? (
+                <input
+                  type="text"
+                  defaultValue={task.title}
+                  onBlur={(e) => {
+                    const newTitle = e.target.value.trim();
+                    if (newTitle && newTitle !== task.title) {
+                      updateMutation.mutate({ id: task.id, title: newTitle });
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="text-xl font-bold mb-3 w-full bg-transparent border-none outline-none hover:bg-muted/10 focus:bg-muted/10 rounded px-1 -ml-1 transition-colors"
+                />
+              ) : (
+                <h2 className="text-xl font-bold mb-3">{task.title}</h2>
+              )}
               <div className="flex items-center gap-1 mb-4">
                 {statusOrder.map((s, i) => {
                   const cfg = statusConfig[s];
@@ -804,10 +820,34 @@ export default function CollaboratorKanban() {
               <div className="p-5 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Prioridade</p>
-                    <div className={`flex items-center gap-1.5 ${pCfg.color}`}>
-                      <PIcon className="h-4 w-4" /><span className="text-sm font-medium">{pCfg.label}</span>
-                    </div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                      Prioridade {isAdmin && <Pencil className="h-3 w-3 text-muted-foreground/50" />}
+                    </p>
+                    {isAdmin ? (
+                      <Select value={task.priority} onValueChange={(v) => updateMutation.mutate({ id: task.id, priority: v as Priority })}>
+                        <SelectTrigger className="h-7 bg-transparent border-none p-0 shadow-none">
+                          <div className={`flex items-center gap-1.5 ${pCfg.color}`}>
+                            <PIcon className="h-4 w-4" /><span className="text-sm font-medium">{pCfg.label}</span>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(priorityConfig).map(([k, v]) => {
+                            const PIco = v.icon;
+                            return (
+                              <SelectItem key={k} value={k}>
+                                <div className={`flex items-center gap-1.5 ${v.color}`}>
+                                  <PIco className="h-3.5 w-3.5" /> {v.label}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className={`flex items-center gap-1.5 ${pCfg.color}`}>
+                        <PIcon className="h-4 w-4" /><span className="text-sm font-medium">{pCfg.label}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-lg bg-muted/10 p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
@@ -858,10 +898,31 @@ export default function CollaboratorKanban() {
                     <p className="text-sm">{creator?.name || "—"}</p>
                   </div>
                   <div className="rounded-lg bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pontos</p>
-                    <div className="flex items-center gap-1 text-primary">
-                      <Zap className="h-4 w-4" /><span className="text-sm font-bold">{task.pointsAwarded}</span>
-                    </div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                      Pontos {isAdmin && <Pencil className="h-3 w-3 text-muted-foreground/50" />}
+                    </p>
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1 text-primary">
+                        <Zap className="h-4 w-4" />
+                        <input
+                          type="number"
+                          min="0"
+                          defaultValue={task.pointsAwarded}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            if (val !== task.pointsAwarded) {
+                              updateMutation.mutate({ id: task.id, pointsAwarded: val });
+                            }
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                          className="text-sm font-bold bg-transparent border-none outline-none w-16 text-primary"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-primary">
+                        <Zap className="h-4 w-4" /><span className="text-sm font-bold">{task.pointsAwarded}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -937,12 +998,32 @@ export default function CollaboratorKanban() {
                   );
                 })()}
 
-                {task.description && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Descrição</h4>
-                    <p className="text-sm leading-relaxed bg-muted/10 rounded-lg p-3">{task.description}</p>
-                  </div>
-                )}
+                {/* ===== DESCRIPTION SECTION (EDITABLE) ===== */}
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Descrição</h4>
+                  {isAdmin ? (
+                    <RichTextEditor
+                      content={task.description || ''}
+                      onChange={(html) => {
+                        // Debounce: only save when user stops typing
+                        if ((window as any).__descTimer) clearTimeout((window as any).__descTimer);
+                        (window as any).__descTimer = setTimeout(() => {
+                          updateMutation.mutate({ id: task.id, description: html });
+                        }, 1000);
+                      }}
+                      placeholder="Adicione uma descrição..."
+                      minHeight="80px"
+                    />
+                  ) : (
+                    task.description ? (
+                      <div className="bg-muted/10 rounded-lg p-3">
+                        <RichTextViewer content={task.description} className="text-sm" />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground/50 bg-muted/10 rounded-lg p-3">Sem descrição</p>
+                    )
+                  )}
+                </div>
 
                 {/* ===== CHECKLIST SECTION ===== */}
                 <Separator className="bg-border/20" />
@@ -1344,7 +1425,7 @@ export default function CollaboratorKanban() {
                         <h4 className="text-sm font-medium truncate group-hover:text-primary transition-colors">{task.title}</h4>
                         {isOverdue && <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5 shrink-0">Atrasada</Badge>}
                       </div>
-                      {task.description && <p className="text-xs text-muted-foreground/60 truncate mt-0.5">{task.description}</p>}
+                      {task.description && <p className="text-xs text-muted-foreground/60 truncate mt-0.5" dangerouslySetInnerHTML={{ __html: task.description.replace(/<[^>]*>/g, ' ').substring(0, 80) }} />}
                     </div>
                     <div className={`flex items-center gap-1.5 text-xs font-medium ${sCfg.color}`}>
                       <div className={`h-2 w-2 rounded-full ${sCfg.dotColor}`} />
@@ -1416,7 +1497,7 @@ export default function CollaboratorKanban() {
                           {isOverdue && <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">Atrasada</Badge>}
                         </div>
                         <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">{task.title}</h4>
-                        {task.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>}
+                        {task.description && <p className="text-xs text-muted-foreground truncate mt-0.5" dangerouslySetInnerHTML={{ __html: task.description.replace(/<[^>]*>/g, ' ').substring(0, 80) }} />}
                       </div>
                       <div className="hidden sm:flex items-center gap-3 shrink-0">
                         {task.dueDate && (
@@ -1668,7 +1749,7 @@ export default function CollaboratorKanban() {
                               {isOverdue && <span className="text-[9px] text-red-400 font-medium shrink-0">ATRASADA</span>}
                             </div>
                             {task.description && (
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5" dangerouslySetInnerHTML={{ __html: task.description.replace(/<[^>]*>/g, ' ').substring(0, 80) }} />
                             )}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -1751,9 +1832,13 @@ export default function CollaboratorKanban() {
                 className="mt-1 bg-muted/10 border-border/20" />
             </div>
             <div>
-              <Label className="text-xs font-medium">Descrição</Label>
-              <Textarea placeholder="Descreva a tarefa..." value={newDesc} onChange={e => setNewDesc(e.target.value)}
-                className="mt-1 bg-muted/10 border-border/20 min-h-[80px]" />
+              <Label className="text-xs font-medium mb-1 block">Descrição</Label>
+              <RichTextEditor
+                content={newDesc}
+                onChange={setNewDesc}
+                placeholder="Descreva a tarefa com formatação..."
+                minHeight="120px"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

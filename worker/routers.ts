@@ -244,6 +244,7 @@ export const appRouter = router({
         dueDate: z.number().nullable().optional(),
         startTime: z.string().nullable().optional(),
         endTime: z.string().nullable().optional(),
+        pointsAwarded: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, assigneeIds, ...data } = input;
