@@ -28,6 +28,8 @@ export const tasks = sqliteTable("tasks", {
   assigneeId: integer("assigneeId"),
   createdById: integer("createdById").notNull(),
   dueDate: integer("dueDate"),
+  startTime: text("startTime"),
+  endTime: text("endTime"),
   completedAt: integer("completedAt"),
   pointsAwarded: integer("pointsAwarded").default(0).notNull(),
   sortOrder: integer("sortOrder").default(0).notNull(),

@@ -108,6 +108,8 @@ export async function createTask(db: DrizzleD1Database, data: {
   assigneeIds?: number[];
   createdById: number;
   dueDate?: number;
+  startTime?: string;
+  endTime?: string;
   companyId?: number;
   pointsReward?: number;
 }) {
@@ -124,6 +126,8 @@ export async function createTask(db: DrizzleD1Database, data: {
     assigneeId: primaryAssignee,
     createdById: data.createdById,
     dueDate: data.dueDate ?? null,
+    startTime: data.startTime ?? null,
+    endTime: data.endTime ?? null,
     companyId: data.companyId ?? null,
     pointsAwarded: data.pointsReward ?? 0,
     createdAt: now,
@@ -203,6 +207,8 @@ export async function updateTask(db: DrizzleD1Database, id: number, data: Partia
   priority: "low" | "medium" | "high" | "urgent";
   assigneeId: number | null;
   dueDate: number | null;
+  startTime: string | null;
+  endTime: string | null;
   completedAt: number | null;
   pointsAwarded: number;
 }>) {

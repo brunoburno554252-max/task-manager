@@ -56,6 +56,8 @@ type TaskItem = {
   completedAt: number | null;
   pointsAwarded: number;
   sortOrder: number;
+  startTime: string | null;
+  endTime: string | null;
   createdAt: Date;
   updatedAt: Date;
   assignees?: { id: number; name: string | null; avatarUrl: string | null }[];
@@ -152,14 +154,21 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
       <h4 className="font-medium text-sm leading-snug mb-1 line-clamp-2 group-hover:text-primary transition-colors">{task.title}</h4>
       {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{task.description}</p>}
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-border/15">
-        {task.dueDate ? (
-          <span className={`flex items-center gap-1 text-[11px] ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
-            <Calendar className="h-3 w-3" />
-            {new Date(task.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-          </span>
-        ) : (
-          <span className="text-[11px] text-muted-foreground/40">Sem prazo</span>
-        )}
+        <div className="flex items-center gap-2">
+          {task.dueDate ? (
+            <span className={`flex items-center gap-1 text-[11px] ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
+              <Calendar className="h-3 w-3" />
+              {new Date(task.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+            </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground/40">Sem prazo</span>
+          )}
+          {(task.startTime || task.endTime) && (
+            <span className="text-[10px] text-muted-foreground/70">
+              {task.startTime || "--:--"} - {task.endTime || "--:--"}
+            </span>
+          )}
+        </div>
         {task.pointsAwarded > 0 && (
           <span className="flex items-center gap-0.5 text-[11px] font-semibold text-primary">
             <Zap className="h-3 w-3" /> {task.pointsAwarded}
@@ -304,6 +313,11 @@ export default function CollaboratorKanban() {
   const [newDesc, setNewDesc] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [newDueDate, setNewDueDate] = useState("");
+  const [newStartTime, setNewStartTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  });
+  const [newEndTime, setNewEndTime] = useState("23:59");
   const [newChecklistItems, setNewChecklistItems] = useState<string[]>([]);
   const [newChecklistInput, setNewChecklistInput] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{file: globalThis.File; preview?: string}[]>([]);
@@ -351,6 +365,9 @@ export default function CollaboratorKanban() {
       utils.collaborators.listWithStats.invalidate();
       setShowCreateDialog(false);
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewDueDate("");
+      const resetNow = new Date();
+      setNewStartTime(`${String(resetNow.getHours()).padStart(2,'0')}:${String(resetNow.getMinutes()).padStart(2,'0')}`);
+      setNewEndTime("23:59");
       setNewChecklistItems([]); setNewChecklistInput("");
       setPendingAttachments([]); setNewPointsReward(10);
       setNewAdditionalAssignees([]);
@@ -811,6 +828,28 @@ export default function CollaboratorKanban() {
                           }
                         }}
                         className="text-sm bg-transparent border-none outline-none cursor-pointer w-full"
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-muted/10 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                      Horário <Pencil className="h-3 w-3 text-muted-foreground/50" />
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input type="time"
+                        value={task.startTime || ''}
+                        onChange={(e) => {
+                          updateMutation.mutate({ id: task.id, startTime: e.target.value || null });
+                        }}
+                        className="text-sm bg-transparent border-none outline-none cursor-pointer w-[70px]"
+                      />
+                      <span className="text-muted-foreground text-xs">até</span>
+                      <input type="time"
+                        value={task.endTime || ''}
+                        onChange={(e) => {
+                          updateMutation.mutate({ id: task.id, endTime: e.target.value || null });
+                        }}
+                        className="text-sm bg-transparent border-none outline-none cursor-pointer w-[70px]"
                       />
                     </div>
                   </div>
@@ -1740,6 +1779,20 @@ export default function CollaboratorKanban() {
               </div>
             </div>
 
+            {/* Horário */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-medium">Hora Início</Label>
+                <Input type="time" value={newStartTime} onChange={e => setNewStartTime(e.target.value)}
+                  className="mt-1 bg-muted/10 border-border/20" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Hora Fim</Label>
+                <Input type="time" value={newEndTime} onChange={e => setNewEndTime(e.target.value)}
+                  className="mt-1 bg-muted/10 border-border/20" />
+              </div>
+            </div>
+
             {/* Colaboradores adicionais (tarefa em conjunto) */}
             <div>
               <Label className="text-xs font-medium flex items-center gap-1.5">
@@ -1946,6 +1999,8 @@ export default function CollaboratorKanban() {
                 priority: newPriority,
                 assigneeIds: [userId, ...newAdditionalAssignees],
                 dueDate: newDueDate ? (() => { const [y,m,d] = newDueDate.split('-').map(Number); return new Date(y, m-1, d, 12, 0, 0).getTime(); })() : undefined,
+                startTime: newStartTime || undefined,
+                endTime: newEndTime || undefined,
                 companyId: companyId || undefined,
                 pointsReward: newPointsReward || undefined,
                 checklistItems: newChecklistItems.length > 0 ? newChecklistItems.map((t, i) => ({ title: t, sortOrder: i })) : undefined,

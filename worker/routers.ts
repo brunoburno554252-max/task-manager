@@ -158,6 +158,8 @@ export const appRouter = router({
         assigneeId: z.number().optional(),
         assigneeIds: z.array(z.number()).optional(),
         dueDate: z.number().optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
         companyId: z.number().optional(),
         pointsReward: z.number().optional(),
         checklistItems: z.array(z.object({
@@ -240,6 +242,8 @@ export const appRouter = router({
         assigneeId: z.number().nullable().optional(),
         assigneeIds: z.array(z.number()).optional(),
         dueDate: z.number().nullable().optional(),
+        startTime: z.string().nullable().optional(),
+        endTime: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, assigneeIds, ...data } = input;
