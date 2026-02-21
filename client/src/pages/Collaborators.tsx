@@ -20,6 +20,7 @@ import { useState, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Building2, ArrowLeft } from "lucide-react";
+import { getStatusLevel } from "@/lib/statusLevels";
 
 export default function Collaborators() {
   const { user } = useAuth();
@@ -496,13 +497,26 @@ export default function Collaborators() {
                 </div>
               </div>
 
-              {/* Points */}
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/20">
-                <span className="text-xs text-muted-foreground">Pontuação</span>
-                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
-                  <Zap className="h-3.5 w-3.5" />
-                  {collab.totalPoints ?? 0}
-                </span>
+              {/* Status Level & Points */}
+              <div className="mt-3 pt-3 border-t border-border/20 space-y-2">
+                {(() => {
+                  const level = getStatusLevel(collab.totalPoints ?? 0);
+                  return (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Nível</span>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${level.bgColor} ${level.color} border ${level.borderColor}`}>
+                        {level.icon} {level.name}
+                      </span>
+                    </div>
+                  );
+                })()}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Pontuação</span>
+                  <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+                    <Zap className="h-3.5 w-3.5" />
+                    {collab.totalPoints ?? 0}
+                  </span>
+                </div>
               </div>
             </div>
           );

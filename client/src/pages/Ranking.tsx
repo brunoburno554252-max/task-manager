@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import {
   Trophy, Zap, Target, Clock, TrendingUp, Crown,
   Star, Plus, Minus, Loader2, History, ChevronDown, ChevronUp,
@@ -13,12 +14,14 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
+import { getStatusLevel, getNextLevel, getLevelProgress, statusLevels } from "@/lib/statusLevels";
 
 const medals = ["🥇", "🥈", "🥉"];
 
 export default function Ranking() {
   const { user } = useAuth();
   const { data: ranking, isLoading } = trpc.gamification.ranking.useQuery();
+  const [showLevelsTable, setShowLevelsTable] = useState(false);
 
   if (isLoading) {
     return (
@@ -37,12 +40,56 @@ export default function Ranking() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ranking</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Classificação de produtividade dos colaboradores.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Ranking</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Classificação de produtividade dos colaboradores.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowLevelsTable(!showLevelsTable)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+        >
+          <Trophy className="h-3.5 w-3.5" />
+          Tabela de Níveis
+          {showLevelsTable ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
       </div>
+
+      {/* Levels Table */}
+      <AnimatePresence>
+        {showLevelsTable && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="stat-card p-4" style={{ "--stat-accent": "oklch(0.75 0.18 50)" } as React.CSSProperties}>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-amber-400" /> Sistema de Níveis por Pontos
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {statusLevels.map((level, i) => (
+                  <div key={i} className={`flex items-center gap-3 rounded-lg ${level.bgColor} border ${level.borderColor} p-3`}>
+                    <span className="text-2xl">{level.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${level.color}`}>{level.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {level.minPoints === 0 ? "0 a 99 pontos" : `${level.minPoints.toLocaleString("pt-BR")}+ pontos`}
+                      </p>
+                      {level.reward && (
+                        <p className="text-[10px] font-medium text-amber-400 mt-0.5">🎁 {level.reward}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Top 3 Podium */}
       {top3.length > 0 && (
@@ -55,6 +102,9 @@ export default function Ranking() {
             const completionRate = r.totalAssigned > 0
               ? Math.round((r.completedTasks / r.totalAssigned) * 100)
               : 0;
+            const level = getStatusLevel(r.totalPoints);
+            const nextLevel = getNextLevel(r.totalPoints);
+            const progress = getLevelProgress(r.totalPoints);
 
             return (
               <motion.div
@@ -86,11 +136,33 @@ export default function Ranking() {
                   </AvatarFallback>
                 </Avatar>
                 <h3 className="font-semibold text-sm truncate">{r.name ?? "Sem nome"}</h3>
-                <div className="flex items-center justify-center gap-1 mt-1">
+
+                {/* Status Level Badge */}
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${level.bgColor} border ${level.borderColor} mt-1.5`}>
+                  <span className="text-sm">{level.icon}</span>
+                  <span className={`text-[11px] font-bold ${level.color}`}>{level.name}</span>
+                </div>
+
+                <div className="flex items-center justify-center gap-1 mt-2">
                   <Zap className="h-3.5 w-3.5 text-amber-400" />
                   <span className="text-lg font-bold">{r.totalPoints}</span>
                   <span className="text-xs text-muted-foreground">pts</span>
                 </div>
+
+                {/* Progress to next level */}
+                {nextLevel && (
+                  <div className="mt-2 px-2">
+                    <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
+                      <span>{level.icon} {level.name}</span>
+                      <span>{nextLevel.icon} {nextLevel.name}</span>
+                    </div>
+                    <Progress value={progress} className="h-1.5" />
+                    <p className="text-[9px] text-muted-foreground mt-0.5">
+                      Faltam {(nextLevel.minPoints - r.totalPoints).toLocaleString("pt-BR")} pts
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-1 mt-3 pt-3 border-t border-border/30">
                   <div>
                     <p className="text-sm font-bold text-emerald-400">{r.completedTasks}</p>
@@ -120,6 +192,9 @@ export default function Ranking() {
               const completionRate = r.totalAssigned > 0
                 ? Math.round((r.completedTasks / r.totalAssigned) * 100)
                 : 0;
+              const level = getStatusLevel(r.totalPoints);
+              const nextLevel = getNextLevel(r.totalPoints);
+              const progress = getLevelProgress(r.totalPoints);
 
               return (
                 <motion.div
@@ -145,6 +220,17 @@ export default function Ranking() {
                       {r.name ?? "Sem nome"}
                       {isMe && <span className="text-xs text-primary ml-2">(você)</span>}
                     </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${level.bgColor} ${level.color}`}>
+                        {level.icon} {level.name}
+                      </span>
+                      {nextLevel && (
+                        <div className="flex items-center gap-1 flex-1 max-w-[120px]">
+                          <Progress value={progress} className="h-1" />
+                          <span className="text-[9px] text-muted-foreground whitespace-nowrap">{progress}%</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground shrink-0">
                     <div className="flex items-center gap-1">
@@ -243,6 +329,17 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
   };
 
   const selectedUserData = ranking.find(r => r.id === selectedUser);
+  const selectedLevel = selectedUserData ? getStatusLevel(selectedUserData.totalPoints) : null;
+  const selectedNextLevel = selectedUserData ? getNextLevel(selectedUserData.totalPoints) : null;
+  const selectedProgress = selectedUserData ? getLevelProgress(selectedUserData.totalPoints) : 0;
+
+  // Preview: what level would they be after the adjustment?
+  const previewPoints = selectedUserData && pointsAmount
+    ? selectedUserData.totalPoints + (isPositive ? parseInt(pointsAmount) || 0 : -(parseInt(pointsAmount) || 0))
+    : null;
+  const previewLevel = previewPoints !== null ? getStatusLevel(Math.max(0, previewPoints)) : null;
+  const levelUp = previewLevel && selectedLevel && previewLevel.name !== selectedLevel.name && isPositive;
+
   const quickAmounts = [5, 10, 25, 50, 100, 250];
   const quickReasons = [
     "Entrega excepcional",
@@ -272,38 +369,67 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
             className="w-full h-10 px-3 rounded-lg border border-border/30 bg-muted/10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             <option value="">Selecione um colaborador...</option>
-            {ranking.map(r => (
-              <option key={r.id} value={r.id}>{r.name ?? "Sem nome"} — {r.totalPoints} pts</option>
-            ))}
+            {ranking.map(r => {
+              const lvl = getStatusLevel(r.totalPoints);
+              return (
+                <option key={r.id} value={r.id}>
+                  {lvl.icon} {r.name ?? "Sem nome"} — {r.totalPoints} pts ({lvl.name})
+                </option>
+              );
+            })}
           </select>
         </div>
 
-        {/* Selected user info card */}
-        {selectedUserData && (
-          <div className="rounded-lg bg-muted/10 p-3 flex items-center gap-3">
-            <Avatar className="h-10 w-10">
-              {(selectedUserData as any).avatarUrl ? (
-                <AvatarImage src={(selectedUserData as any).avatarUrl} alt={selectedUserData.name || ""} className="object-cover" />
-              ) : null}
-              <AvatarFallback className="text-sm font-bold bg-primary/20 text-primary">
-                {selectedUserData.name?.charAt(0)?.toUpperCase() ?? "?"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="text-sm font-medium">{selectedUserData.name}</p>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Zap className="h-3 w-3 text-amber-400" />
-                <span className="font-bold text-foreground">{selectedUserData.totalPoints}</span> pontos atuais
+        {/* Selected user info card with level */}
+        {selectedUserData && selectedLevel && (
+          <div className={`rounded-lg ${selectedLevel.bgColor} border ${selectedLevel.borderColor} p-4`}>
+            <div className="flex items-center gap-3">
+              <Avatar className="h-12 w-12">
+                {(selectedUserData as any).avatarUrl ? (
+                  <AvatarImage src={(selectedUserData as any).avatarUrl} alt={selectedUserData.name || ""} className="object-cover" />
+                ) : null}
+                <AvatarFallback className="text-sm font-bold bg-primary/20 text-primary">
+                  {selectedUserData.name?.charAt(0)?.toUpperCase() ?? "?"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{selectedUserData.name}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-lg">{selectedLevel.icon}</span>
+                  <span className={`text-sm font-bold ${selectedLevel.color}`}>{selectedLevel.name}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                  <Zap className="h-3 w-3 text-amber-400" />
+                  <span className="font-bold text-foreground">{selectedUserData.totalPoints}</span> pontos
+                </div>
               </div>
+              {userBadges && userBadges.length > 0 && (
+                <div className="flex gap-0.5">
+                  {userBadges.slice(0, 5).map((b: any) => (
+                    <span key={b.id} className="text-lg" title={b.name}>{b.icon}</span>
+                  ))}
+                  {userBadges.length > 5 && (
+                    <span className="text-xs text-muted-foreground self-center ml-1">+{userBadges.length - 5}</span>
+                  )}
+                </div>
+              )}
             </div>
-            {userBadges && userBadges.length > 0 && (
-              <div className="flex gap-0.5">
-                {userBadges.slice(0, 5).map((b: any) => (
-                  <span key={b.id} className="text-lg" title={b.name}>{b.icon}</span>
-                ))}
-                {userBadges.length > 5 && (
-                  <span className="text-xs text-muted-foreground self-center ml-1">+{userBadges.length - 5}</span>
-                )}
+            {/* Progress bar to next level */}
+            {selectedNextLevel && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                  <span>{selectedLevel.icon} {selectedLevel.name}</span>
+                  <span>{selectedNextLevel.icon} {selectedNextLevel.name}</span>
+                </div>
+                <Progress value={selectedProgress} className="h-2" />
+                <p className="text-[10px] text-muted-foreground mt-0.5 text-center">
+                  Faltam <strong>{(selectedNextLevel.minPoints - selectedUserData.totalPoints).toLocaleString("pt-BR")}</strong> pts para {selectedNextLevel.name}
+                </p>
+              </div>
+            )}
+            {selectedLevel.reward && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-400 font-medium">
+                🎁 Recompensa: {selectedLevel.reward}
               </div>
             )}
           </div>
@@ -385,15 +511,20 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
           </div>
         </div>
 
-        {/* Preview */}
+        {/* Preview with level change indicator */}
         {selectedUserData && pointsAmount && reason && (
           <div className={`rounded-lg p-3 text-sm ${isPositive ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-red-500/10 border border-red-500/20"}`}>
             <p className={isPositive ? "text-emerald-500" : "text-red-500"}>
               {isPositive ? "+" : "-"}{pointsAmount} pontos para <strong>{selectedUserData.name}</strong>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Motivo: {reason} — Novo total: {selectedUserData.totalPoints + (isPositive ? parseInt(pointsAmount) || 0 : -(parseInt(pointsAmount) || 0))} pts
+              Motivo: {reason} — Novo total: {Math.max(0, previewPoints || 0)} pts
             </p>
+            {levelUp && previewLevel && (
+              <p className="text-xs font-bold text-amber-400 mt-1 flex items-center gap-1">
+                🎉 Sobe de nível! {selectedLevel?.icon} {selectedLevel?.name} → {previewLevel.icon} {previewLevel.name}
+              </p>
+            )}
           </div>
         )}
 

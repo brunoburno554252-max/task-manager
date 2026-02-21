@@ -23,6 +23,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
+import { getStatusLevel } from "@/lib/statusLevels";
 import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
@@ -266,9 +267,18 @@ function DashboardLayoutContent({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "-"}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {(() => {
+                        const level = getStatusLevel((user as any)?.totalPoints || 0);
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${level.bgColor} ${level.color}`}>
+                            {level.icon} {level.name}
+                          </span>
+                        );
+                      })()}
+                      <span className="text-[10px] text-muted-foreground">•</span>
+                      <span className="text-[10px] text-amber-400 font-medium">{(user as any)?.totalPoints || 0} pts</span>
+                    </div>
                   </div>
                 </button>
               </DropdownMenuTrigger>

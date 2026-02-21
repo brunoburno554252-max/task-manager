@@ -299,6 +299,9 @@ export default function CollaboratorKanban() {
   const [activeTab, setActiveTab] = useState<TaskStatus>("pending");
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -487,13 +490,34 @@ export default function CollaboratorKanban() {
     if (priorityFilter !== "all") {
       result = result.filter(t => t.priority === priorityFilter);
     }
+    // Filtro por status
+    if (statusFilter !== "all") {
+      result = result.filter(t => t.status === statusFilter);
+    }
+    // Filtro por data (range)
+    if (dateFrom) {
+      const from = new Date(dateFrom + "T00:00:00").getTime();
+      result = result.filter(t => {
+        if (!t.dueDate) return false;
+        const d = typeof t.dueDate === 'number' ? t.dueDate : new Date(t.dueDate).getTime();
+        return d >= from;
+      });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + "T23:59:59").getTime();
+      result = result.filter(t => {
+        if (!t.dueDate) return false;
+        const d = typeof t.dueDate === 'number' ? t.dueDate : new Date(t.dueDate).getTime();
+        return d <= to;
+      });
+    }
     // Filtro por empresa (só quando não está no contexto de empresa via URL)
     if (!companyId && companyFilter !== "all") {
       const cId = parseInt(companyFilter);
       result = result.filter(t => (t as any).companyId === cId);
     }
     return result;
-  }, [tasks, search, priorityFilter, companyId, companyFilter]);
+  }, [tasks, search, priorityFilter, statusFilter, dateFrom, dateTo, companyId, companyFilter]);
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
@@ -1337,11 +1361,30 @@ export default function CollaboratorKanban() {
             <SelectValue placeholder="Prioridade" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
+            <SelectItem value="all">Todas Prioridades</SelectItem>
             {Object.entries(priorityConfig).map(([key, cfg]) => {
               const Icon = cfg.icon;
               return (
                 <SelectItem key={key} value={key}>
+                  <div className="flex items-center gap-2"><Icon className={`h-3.5 w-3.5 ${cfg.color}`} /> {cfg.label}</div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+
+        {/* Filtro por status */}
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px] bg-card/80 border-border/30">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos Status</SelectItem>
+            {statusOrder.map(s => {
+              const cfg = statusConfig[s];
+              const Icon = cfg.icon;
+              return (
+                <SelectItem key={s} value={s}>
                   <div className="flex items-center gap-2"><Icon className={`h-3.5 w-3.5 ${cfg.color}`} /> {cfg.label}</div>
                 </SelectItem>
               );
@@ -1369,6 +1412,41 @@ export default function CollaboratorKanban() {
           </Select>
         )}
 
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Calendar className="h-3.5 w-3.5" />
+          <span>Filtrar por data:</span>
+        </div>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={e => setDateFrom(e.target.value)}
+          className="h-8 px-2 rounded-lg border border-border/30 bg-card/80 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        <span className="text-xs text-muted-foreground">até</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={e => setDateTo(e.target.value)}
+          className="h-8 px-2 rounded-lg border border-border/30 bg-card/80 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        {(dateFrom || dateTo || priorityFilter !== "all" || statusFilter !== "all" || companyFilter !== "all") && (
+          <button
+            onClick={() => { setDateFrom(""); setDateTo(""); setPriorityFilter("all"); setStatusFilter("all"); setCompanyFilter("all"); }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          >
+            <X className="h-3 w-3" /> Limpar filtros
+          </button>
+        )}
+        <span className="text-[10px] text-muted-foreground ml-auto">
+          {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         {/* View Toggle — 4 modes */}
         <div className="flex items-center gap-0.5 bg-card/80 border border-border/30 rounded-lg p-1">
           {viewModes.map(vm => {
