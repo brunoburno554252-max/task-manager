@@ -1,8 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Award, Lock, CheckCircle2, Trophy, Gift, Star, TrendingUp, ChevronRight } from "lucide-react";
+import { Award, Lock, CheckCircle2, Trophy, Gift, Star, TrendingUp } from "lucide-react";
 import { statusLevels, getStatusLevel, getNextLevel, getLevelProgress } from "@/lib/statusLevels";
+import LevelIcon from "@/components/LevelIcon";
 
 export default function Badges() {
   const { user } = useAuth();
@@ -47,8 +48,8 @@ export default function Badges() {
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <div className="flex flex-col items-center text-center">
-            <span className="text-6xl mb-2 drop-shadow-lg">{currentLevel.icon}</span>
-            <span className={`text-lg font-bold ${currentLevel.color}`}>{currentLevel.name}</span>
+            <LevelIcon level={currentLevel} size="xl" />
+            <span className={`text-lg font-bold mt-3 ${currentLevel.color}`}>{currentLevel.name}</span>
             <span className="text-sm text-muted-foreground mt-1">{userPoints.toLocaleString()} pontos</span>
             {currentLevel.reward && (
               <span className="flex items-center gap-1 mt-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-semibold border border-amber-500/20">
@@ -72,8 +73,8 @@ export default function Badges() {
                 <span className="text-xs text-muted-foreground">
                   Faltam <strong className="text-foreground">{(nextLevel.minPoints - userPoints).toLocaleString()}</strong> pontos
                 </span>
-                <span className="flex items-center gap-1 text-xs">
-                  <span className="text-lg">{nextLevel.icon}</span>
+                <span className="flex items-center gap-2 text-xs">
+                  <LevelIcon level={nextLevel} size="sm" />
                   <span className={`font-semibold ${nextLevel.color}`}>{nextLevel.name}</span>
                 </span>
               </div>
@@ -81,7 +82,7 @@ export default function Badges() {
           )}
           {!nextLevel && (
             <div className="flex-1 text-center sm:text-left">
-              <p className="text-lg font-bold text-amber-400">🎉 Nível Máximo Alcançado!</p>
+              <p className="text-lg font-bold text-amber-400">Nível Máximo Alcançado!</p>
               <p className="text-sm text-muted-foreground mt-1">Parabéns! Você chegou ao topo da hierarquia.</p>
             </div>
           )}
@@ -140,9 +141,9 @@ export default function Badges() {
                   </div>
 
                   {/* Icon */}
-                  <span className={`text-4xl flex-shrink-0 ${isUnlocked ? "drop-shadow-lg" : "grayscale opacity-50"}`}>
-                    {level.icon}
-                  </span>
+                  <div className={`flex-shrink-0 ${!isUnlocked ? "opacity-40 grayscale" : ""}`}>
+                    <LevelIcon level={level} size="lg" />
+                  </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">

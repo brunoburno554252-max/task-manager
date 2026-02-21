@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getStatusLevel, getNextLevel, getLevelProgress, statusLevels } from "@/lib/statusLevels";
+import LevelIcon from "@/components/LevelIcon";
 
 const medals = ["🥇", "🥈", "🥉"];
 
@@ -73,14 +74,14 @@ export default function Ranking() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {statusLevels.map((level, i) => (
                   <div key={i} className={`flex items-center gap-3 rounded-lg ${level.bgColor} border ${level.borderColor} p-3`}>
-                    <span className="text-2xl">{level.icon}</span>
+                    <LevelIcon level={level} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-bold ${level.color}`}>{level.name}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {level.minPoints === 0 ? "0 a 99 pontos" : `${level.minPoints.toLocaleString("pt-BR")}+ pontos`}
                       </p>
                       {level.reward && (
-                        <p className="text-[10px] font-medium text-amber-400 mt-0.5">🎁 {level.reward}</p>
+                        <p className="text-[10px] font-medium text-amber-400 mt-0.5">Prêmio: {level.reward}</p>
                       )}
                     </div>
                   </div>
@@ -139,7 +140,7 @@ export default function Ranking() {
 
                 {/* Status Level Badge */}
                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${level.bgColor} border ${level.borderColor} mt-1.5`}>
-                  <span className="text-sm">{level.icon}</span>
+                  <LevelIcon level={level} size="sm" showBg={false} />
                   <span className={`text-[11px] font-bold ${level.color}`}>{level.name}</span>
                 </div>
 
@@ -153,8 +154,8 @@ export default function Ranking() {
                 {nextLevel && (
                   <div className="mt-2 px-2">
                     <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
-                      <span>{level.icon} {level.name}</span>
-                      <span>{nextLevel.icon} {nextLevel.name}</span>
+                      <span className="inline-flex items-center gap-1"><LevelIcon level={level} size="sm" showBg={false} /> {level.name}</span>
+                      <span className="inline-flex items-center gap-1"><LevelIcon level={nextLevel} size="sm" showBg={false} /> {nextLevel.name}</span>
                     </div>
                     <Progress value={progress} className="h-1.5" />
                     <p className="text-[9px] text-muted-foreground mt-0.5">
@@ -222,7 +223,7 @@ export default function Ranking() {
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${level.bgColor} ${level.color}`}>
-                        {level.icon} {level.name}
+                        <LevelIcon level={level} size="sm" showBg={false} /> {level.name}
                       </span>
                       {nextLevel && (
                         <div className="flex items-center gap-1 flex-1 max-w-[120px]">
@@ -373,7 +374,7 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
               const lvl = getStatusLevel(r.totalPoints);
               return (
                 <option key={r.id} value={r.id}>
-                  {lvl.icon} {r.name ?? "Sem nome"} — {r.totalPoints} pts ({lvl.name})
+                  {lvl.name} | {r.name ?? "Sem nome"} — {r.totalPoints} pts
                 </option>
               );
             })}
@@ -395,7 +396,7 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
               <div className="flex-1">
                 <p className="text-sm font-medium">{selectedUserData.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-lg">{selectedLevel.icon}</span>
+                  <LevelIcon level={selectedLevel} size="md" />
                   <span className={`text-sm font-bold ${selectedLevel.color}`}>{selectedLevel.name}</span>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
@@ -418,8 +419,8 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
             {selectedNextLevel && (
               <div className="mt-3">
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                  <span>{selectedLevel.icon} {selectedLevel.name}</span>
-                  <span>{selectedNextLevel.icon} {selectedNextLevel.name}</span>
+                  <span className="inline-flex items-center gap-1"><LevelIcon level={selectedLevel} size="sm" showBg={false} /> {selectedLevel.name}</span>
+                  <span className="inline-flex items-center gap-1"><LevelIcon level={selectedNextLevel} size="sm" showBg={false} /> {selectedNextLevel.name}</span>
                 </div>
                 <Progress value={selectedProgress} className="h-2" />
                 <p className="text-[10px] text-muted-foreground mt-0.5 text-center">
@@ -429,7 +430,7 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
             )}
             {selectedLevel.reward && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-400 font-medium">
-                🎁 Recompensa: {selectedLevel.reward}
+                Prêmio: {selectedLevel.reward}
               </div>
             )}
           </div>
@@ -522,7 +523,7 @@ function PointsManager({ ranking }: { ranking: { id: number; name: string | null
             </p>
             {levelUp && previewLevel && (
               <p className="text-xs font-bold text-amber-400 mt-1 flex items-center gap-1">
-                🎉 Sobe de nível! {selectedLevel?.icon} {selectedLevel?.name} → {previewLevel.icon} {previewLevel.name}
+                Sobe de nível! {selectedLevel?.name} → {previewLevel.name}
               </p>
             )}
           </div>

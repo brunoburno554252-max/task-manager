@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import { getStatusLevel } from "@/lib/statusLevels";
+import LevelIcon from "@/components/LevelIcon";
 import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
@@ -272,7 +273,7 @@ function DashboardLayoutContent({
                         const level = getStatusLevel((user as any)?.totalPoints || 0);
                         return (
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${level.bgColor} ${level.color}`}>
-                            {level.icon} {level.name}
+                            <LevelIcon level={level} size="sm" showBg={false} /> {level.name}
                           </span>
                         );
                       })()}

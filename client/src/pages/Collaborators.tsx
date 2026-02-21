@@ -21,6 +21,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Building2, ArrowLeft } from "lucide-react";
 import { getStatusLevel } from "@/lib/statusLevels";
+import LevelIcon from "@/components/LevelIcon";
 
 export default function Collaborators() {
   const { user } = useAuth();
@@ -505,7 +506,7 @@ export default function Collaborators() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Nível</span>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${level.bgColor} ${level.color} border ${level.borderColor}`}>
-                        {level.icon} {level.name}
+                        <LevelIcon level={level} size="sm" showBg={false} /> {level.name}
                       </span>
                     </div>
                   );
