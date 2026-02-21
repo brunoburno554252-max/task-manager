@@ -32,7 +32,8 @@ export default function Badges() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-4xl mx-auto">
+      {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Conquistas</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -40,30 +41,34 @@ export default function Badges() {
         </p>
       </div>
 
-      {/* Meu Nível Atual */}
-      <div className="stat-card p-6" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+      {/* Meu Nível Atual - Card compacto e bem alinhado */}
+      <div className="rounded-xl border border-border/40 bg-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <Star className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-bold">Meu Nível Atual</h2>
         </div>
+
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="flex flex-col items-center text-center">
+          {/* Ícone e nome do nível */}
+          <div className="flex flex-col items-center text-center shrink-0">
             <LevelIcon level={currentLevel} size="xl" />
-            <span className={`text-lg font-bold mt-3 ${currentLevel.color}`}>{currentLevel.name}</span>
-            <span className="text-sm text-muted-foreground mt-1">{userPoints.toLocaleString()} pontos</span>
+            <span className={`text-lg font-bold mt-2 ${currentLevel.color}`}>{currentLevel.name}</span>
+            <span className="text-sm text-muted-foreground">{userPoints.toLocaleString()} pontos</span>
             {currentLevel.reward && (
               <span className="flex items-center gap-1 mt-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-semibold border border-amber-500/20">
                 <Gift className="h-3 w-3" /> {currentLevel.reward}
               </span>
             )}
           </div>
+
+          {/* Barra de progresso */}
           {nextLevel && (
-            <div className="flex-1 w-full">
+            <div className="flex-1 w-full min-w-0">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                <span>Progresso para {nextLevel.name}</span>
-                <span>{progress}%</span>
+                <span>Progresso para <strong className={nextLevel.color}>{nextLevel.name}</strong></span>
+                <span className="font-medium">{progress}%</span>
               </div>
-              <div className="h-3 rounded-full bg-muted/50 overflow-hidden">
+              <div className="h-3 rounded-full bg-muted/30 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-primary to-chart-4 transition-all duration-700"
                   style={{ width: `${progress}%` }}
@@ -73,13 +78,14 @@ export default function Badges() {
                 <span className="text-xs text-muted-foreground">
                   Faltam <strong className="text-foreground">{(nextLevel.minPoints - userPoints).toLocaleString()}</strong> pontos
                 </span>
-                <span className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
                   <LevelIcon level={nextLevel} size="sm" />
-                  <span className={`font-semibold ${nextLevel.color}`}>{nextLevel.name}</span>
-                </span>
+                  <span className={`text-xs font-semibold ${nextLevel.color}`}>{nextLevel.name}</span>
+                </div>
               </div>
             </div>
           )}
+
           {!nextLevel && (
             <div className="flex-1 text-center sm:text-left">
               <p className="text-lg font-bold text-amber-400">Nível Máximo Alcançado!</p>
@@ -89,116 +95,114 @@ export default function Badges() {
         </div>
       </div>
 
-      {/* Tabela de Níveis - Todos podem ver */}
+      {/* Tabela de Níveis de Progressão */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <Trophy className="h-5 w-5 text-amber-400" />
           <h2 className="text-lg font-bold">Níveis de Progressão</h2>
-          <span className="text-xs text-muted-foreground ml-2">Veja o que você pode conquistar!</span>
         </div>
 
-        <div className="grid gap-3">
+        <div className="space-y-2">
           {statusLevels.map((level, index) => {
             const isCurrentLevel = currentLevel.name === level.name;
             const isUnlocked = userPoints >= level.minPoints;
             const isNext = nextLevel?.name === level.name;
+            const maxPoints = index < statusLevels.length - 1 ? statusLevels[index + 1].minPoints - 1 : null;
 
             return (
               <div
                 key={level.name}
-                className={`relative stat-card p-4 transition-all ${
+                className={`relative rounded-xl border p-4 transition-all overflow-hidden ${
                   isCurrentLevel
-                    ? "ring-2 ring-primary/50 shadow-lg shadow-primary/10"
+                    ? "border-primary/50 bg-primary/5 shadow-md"
+                    : isNext
+                    ? "border-amber-500/30 bg-amber-500/5"
                     : isUnlocked
-                    ? "ring-1 ring-green-500/20"
-                    : "opacity-70"
+                    ? "border-green-500/20 bg-card"
+                    : "border-border/20 bg-card opacity-60"
                 }`}
-                style={{
-                  "--stat-accent": isCurrentLevel
-                    ? "oklch(0.72 0.19 280)"
-                    : isUnlocked
-                    ? "oklch(0.65 0.15 150)"
-                    : "oklch(0.3 0.01 270)",
-                } as React.CSSProperties}
               >
+                {/* Badges de status - dentro do card, não fora */}
                 {isCurrentLevel && (
-                  <div className="absolute -top-2 right-4 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                    VOCÊ ESTÁ AQUI
+                  <div className="absolute top-2 right-3 px-2 py-0.5 rounded-md bg-primary text-primary-foreground text-[10px] font-bold">
+                    SEU NÍVEL
                   </div>
                 )}
                 {isNext && (
-                  <div className="absolute -top-2 right-4 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold animate-pulse">
-                    PRÓXIMO NÍVEL
+                  <div className="absolute top-2 right-3 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-bold animate-pulse">
+                    PRÓXIMO
                   </div>
                 )}
 
-                <div className="flex items-center gap-4">
-                  {/* Rank Number */}
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                    isUnlocked ? "bg-primary/20 text-primary" : "bg-muted/30 text-muted-foreground"
+                <div className="flex items-center gap-3">
+                  {/* Número do nível */}
+                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                    isUnlocked ? "bg-primary/20 text-primary" : "bg-muted/20 text-muted-foreground"
                   }`}>
                     {index + 1}
                   </div>
 
-                  {/* Icon */}
-                  <div className={`flex-shrink-0 ${!isUnlocked ? "opacity-40 grayscale" : ""}`}>
-                    <LevelIcon level={level} size="lg" />
+                  {/* Ícone */}
+                  <div className={`shrink-0 ${!isUnlocked ? "opacity-40 grayscale" : ""}`}>
+                    <LevelIcon level={level} size="md" />
                   </div>
 
-                  {/* Info */}
+                  {/* Nome e pontos */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className={`font-bold text-sm ${isUnlocked ? level.color : "text-muted-foreground"}`}>
                         {level.name}
                       </h3>
-                      {isUnlocked && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-green-400 font-medium">
+                      {isUnlocked ? (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-400 font-medium">
                           <CheckCircle2 className="h-3 w-3" /> Desbloqueado
                         </span>
-                      )}
-                      {!isUnlocked && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
                           <Lock className="h-3 w-3" /> Bloqueado
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      A partir de <strong>{level.minPoints.toLocaleString()}</strong> pontos
-                      {index < statusLevels.length - 1 && (
-                        <> até <strong>{(statusLevels[index + 1].minPoints - 1).toLocaleString()}</strong> pontos</>
-                      )}
-                      {index === statusLevels.length - 1 && <> (nível máximo)</>}
+                      {level.minPoints.toLocaleString()} {maxPoints ? `a ${maxPoints.toLocaleString()}` : "+"} pontos
                     </p>
                   </div>
 
-                  {/* Reward */}
-                  <div className="flex-shrink-0 text-right">
+                  {/* Recompensa - alinhada à direita */}
+                  <div className="shrink-0 hidden sm:block">
                     {level.reward ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                        <Gift className="h-4 w-4 text-amber-400" />
-                        <div>
-                          <p className="text-[10px] text-amber-400/70 font-medium">Recompensa</p>
-                          <p className="text-xs font-bold text-amber-400">{level.reward}</p>
-                        </div>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                        <Gift className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        <span className="text-xs font-bold text-amber-400 whitespace-nowrap">{level.reward}</span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted/20 border border-border/20">
-                        <TrendingUp className="h-4 w-4 text-muted-foreground/50" />
-                        <div>
-                          <p className="text-[10px] text-muted-foreground/70 font-medium">Recompensa</p>
-                          <p className="text-xs text-muted-foreground">Prestígio</p>
-                        </div>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/10 border border-border/20">
+                        <TrendingUp className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Prestígio</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Progress bar for next level */}
+                {/* Recompensa mobile - abaixo do conteúdo */}
+                <div className="sm:hidden mt-2 ml-10">
+                  {level.reward ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-400">
+                      <Gift className="h-3 w-3" /> {level.reward}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-muted/10 border border-border/20 text-xs text-muted-foreground">
+                      <TrendingUp className="h-3 w-3" /> Prestígio
+                    </span>
+                  )}
+                </div>
+
+                {/* Barra de progresso para o próximo nível */}
                 {isNext && (
-                  <div className="mt-3 pt-3 border-t border-border/20">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+                  <div className="mt-3 pt-3 border-t border-border/20 ml-10">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
                       <span>Seu progresso</span>
-                      <span>{userPoints.toLocaleString()} / {level.minPoints.toLocaleString()} pts</span>
+                      <span className="font-medium">{userPoints.toLocaleString()} / {level.minPoints.toLocaleString()} pts</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
                       <div
@@ -217,7 +221,7 @@ export default function Badges() {
         </div>
       </div>
 
-      {/* Conquistas (Badges) */}
+      {/* Conquistas Especiais (Badges) */}
       {allBadges && allBadges.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-4">
@@ -229,23 +233,23 @@ export default function Badges() {
           </div>
 
           {/* Summary bar */}
-          <div className="stat-card p-4 mb-4" style={{ "--stat-accent": "oklch(0.65 0.2 310)" } as React.CSSProperties}>
+          <div className="rounded-xl border border-border/40 bg-card p-4 mb-4">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-2xl bg-primary/15 flex items-center justify-center shrink-0">
                 <Award className="h-6 w-6 text-primary" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="text-sm text-muted-foreground">Progresso das Conquistas</p>
-                <div className="h-2 rounded-full bg-muted/50 overflow-hidden mt-2">
+                <div className="h-2 rounded-full bg-muted/30 overflow-hidden mt-2">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-primary to-chart-4 transition-all duration-500"
                     style={{ width: `${allBadges.length > 0 ? ((myBadges?.length ?? 0) / allBadges.length) * 100 : 0}%` }}
                   />
                 </div>
               </div>
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold shrink-0">
                 {myBadges?.length ?? 0}
-                <span className="text-sm text-muted-foreground font-normal"> / {allBadges.length}</span>
+                <span className="text-sm text-muted-foreground font-normal">/{allBadges.length}</span>
               </p>
             </div>
           </div>
@@ -259,14 +263,11 @@ export default function Badges() {
               return (
                 <div
                   key={badge.id}
-                  className={`stat-card p-4 flex flex-col items-center text-center transition-all ${
+                  className={`rounded-xl border p-4 flex flex-col items-center text-center transition-all ${
                     earned
-                      ? "ring-1 ring-primary/30"
-                      : "opacity-50"
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-border/20 bg-card opacity-50"
                   }`}
-                  style={{
-                    "--stat-accent": earned ? "oklch(0.72 0.19 280)" : "oklch(0.3 0.01 270)",
-                  } as React.CSSProperties}
                 >
                   <div className={`text-4xl mb-2 ${earned ? "drop-shadow-lg" : "grayscale"}`}>
                     {badge.icon}
@@ -294,7 +295,7 @@ export default function Badges() {
       )}
 
       {(!allBadges || allBadges.length === 0) && (
-        <div className="stat-card p-12 text-center" style={{ "--stat-accent": "oklch(0.72 0.19 280)" } as React.CSSProperties}>
+        <div className="rounded-xl border border-border/20 bg-card p-12 text-center">
           <Award className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
           <p className="text-muted-foreground">Nenhuma conquista especial disponível ainda</p>
         </div>
