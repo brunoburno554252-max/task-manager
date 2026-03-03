@@ -166,3 +166,20 @@ export const companyMembers = sqliteTable("company_members", {
 
 export type CompanyMember = typeof companyMembers.$inferSelect;
 export type InsertCompanyMember = typeof companyMembers.$inferInsert;
+
+// ===== CAIXA DE IDEIAS =====
+export const ideas = sqliteTable("ideas", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status", { enum: ["new", "rejected", "analysis", "approved"] }).default("new").notNull(),
+  authorId: integer("authorId").notNull(),
+  pointsAwarded: integer("pointsAwarded").default(0).notNull(),
+  approvedById: integer("approvedById"),
+  rejectionReason: text("rejectionReason"),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type Idea = typeof ideas.$inferSelect;
+export type InsertIdea = typeof ideas.$inferInsert;

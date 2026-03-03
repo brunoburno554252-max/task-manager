@@ -27,7 +27,7 @@ import { getStatusLevel } from "@/lib/statusLevels";
 import LevelIcon from "@/components/LevelIcon";
 import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
-  Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
+  Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings, Lightbulb,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -44,6 +44,7 @@ const menuItems = [
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
+  { icon: Lightbulb, label: "Caixa de Ideias", path: "/ideas" },
   { icon: Activity, label: "Atividades", path: "/activity" },
   { icon: Settings, label: "Configurações", path: "/settings", adminOnly: true },
 ];

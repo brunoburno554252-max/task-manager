@@ -19,6 +19,7 @@ const Chat = lazy(() => import("./pages/Chat"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
 const Companies = lazy(() => import("./pages/Companies"));
+const IdeasBox = lazy(() => import("./pages/IdeasBox"));
 
 function PageLoader() {
   return (
@@ -48,6 +49,7 @@ function Router() {
           <Route path={"/chat"} component={Chat} />
           <Route path={"/profile"} component={Profile} />
           <Route path={"/settings"} component={AdminSettings} />
+          <Route path={"/ideas"} component={IdeasBox} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

@@ -17,6 +17,7 @@ import {
   getAllCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, getCompaniesWithStats,
   getCompanyMembers, addCompanyMember, removeCompanyMember, getCompanyCollaboratorsWithStats,
   getTaskAssignees, setTaskAssignees,
+  createIdea, listIdeas, getIdeaById, updateIdea, deleteIdea,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -289,26 +290,44 @@ export const appRouter = router({
           updateData.completedAt = now;
 
           const onTime = !task.dueDate || now <= task.dueDate;
-          const totalPoints = calculatePoints(task.priority, onTime);
-          updateData.pointsAwarded = totalPoints;
 
-          // Divide points among all assignees
-          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
-          if (allAssignees.length > 0) {
-            const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
-            for (const assignee of allAssignees) {
-              await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa em conjunto "${task.title}" (${allAssignees.length} colaboradores)`, task.id);
-              const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
-              for (const badge of newBadges) {
-                await logActivity(ctx.db, {
-                  userId: assignee.id,
-                  action: "earned_badge",
-                  entityType: "badge",
-                  entityId: badge.id,
-                  details: `Conquistou o badge "${badge.name}"`,
-                });
+          // Se a tarefa está atrasada, os pontos são ZERADOS
+          if (!onTime) {
+            updateData.pointsAwarded = 0;
+          } else {
+            const totalPoints = calculatePoints(task.priority, onTime);
+            updateData.pointsAwarded = totalPoints;
+          }
+
+          // Divide points among all assignees (somente se não está atrasada)
+          if (onTime) {
+            const totalPoints = updateData.pointsAwarded as number;
+            const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
+            if (allAssignees.length > 0) {
+              const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
+              for (const assignee of allAssignees) {
+                await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa em conjunto "${task.title}" (${allAssignees.length} colaboradores)`, task.id);
+                const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
+                for (const badge of newBadges) {
+                  await logActivity(ctx.db, {
+                    userId: assignee.id,
+                    action: "earned_badge",
+                    entityType: "badge",
+                    entityId: badge.id,
+                    details: `Conquistou o badge "${badge.name}"`,
+                  });
+                }
               }
             }
+          } else {
+            // Tarefa atrasada: registrar no log que os pontos foram zerados
+            await logActivity(ctx.db, {
+              userId: ctx.user.id,
+              action: "points_zeroed",
+              entityType: "task",
+              entityId: input.id,
+              details: `Pontos zerados por atraso na tarefa "${task.title}"`,
+            });
           }
         }
 
@@ -693,6 +712,101 @@ export const appRouter = router({
           entityType: "company_member",
           entityId: input.companyId,
           details: `Removeu colaborador #${input.userId} da empresa #${input.companyId}`,
+        });
+        return { success: true };
+      }),
+  }),
+
+  ideas: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return listIdeas(ctx.db);
+    }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getIdeaById(ctx.db, input.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1).max(255),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await createIdea(ctx.db, {
+          title: input.title,
+          description: input.description,
+          authorId: ctx.user.id,
+        });
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "created",
+          entityType: "idea",
+          entityId: result.id,
+          details: `Enviou a ideia "${input.title}"`,
+        });
+        return result;
+      }),
+
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["new", "rejected", "analysis", "approved"]),
+        rejectionReason: z.string().optional(),
+        pointsAwarded: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const idea = await getIdeaById(ctx.db, input.id);
+        if (!idea) throw new Error("Ideia não encontrada");
+
+        const updateData: Record<string, unknown> = {
+          status: input.status,
+          approvedById: ctx.user.id,
+        };
+
+        if (input.status === "rejected") {
+          updateData.rejectionReason = input.rejectionReason ?? null;
+          updateData.pointsAwarded = 0;
+        }
+
+        if (input.status === "approved") {
+          const points = input.pointsAwarded ?? 15;
+          updateData.pointsAwarded = points;
+          await addPoints(ctx.db, idea.authorId, points, `Ideia aprovada: "${idea.title}"`, null);
+          await checkAndAwardBadges(ctx.db, idea.authorId);
+        }
+
+        await updateIdea(ctx.db, input.id, updateData as any);
+
+        const statusLabels: Record<string, string> = {
+          new: "Nova",
+          rejected: "Rejeitada",
+          analysis: "Em Análise",
+          approved: "Aprovada",
+        };
+
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "status_changed",
+          entityType: "idea",
+          entityId: input.id,
+          details: `Alterou status da ideia para "${statusLabels[input.status]}"`,
+        });
+
+        return { success: true };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteIdea(ctx.db, input.id);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: "deleted",
+          entityType: "idea",
+          entityId: input.id,
+          details: `Excluiu a ideia #${input.id}`,
         });
         return { success: true };
       }),

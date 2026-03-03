@@ -5,6 +5,7 @@ import {
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
   checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
+  ideas, Idea, InsertIdea,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -798,4 +799,78 @@ export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, co
     .orderBy(desc(users.totalPoints));
 
   return result;
+}
+
+// ============ IDEAS (CAIXA DE IDEIAS) ============
+
+export async function createIdea(db: DrizzleD1Database, data: { title: string; description?: string; authorId: number }) {
+  const now = new Date().toISOString();
+  const result = await db.insert(ideas).values({
+    title: data.title,
+    description: data.description ?? null,
+    status: "new",
+    authorId: data.authorId,
+    pointsAwarded: 0,
+    createdAt: now,
+    updatedAt: now,
+  }).returning({ id: ideas.id });
+  return { id: result[0].id };
+}
+
+export async function listIdeas(db: DrizzleD1Database) {
+  return db.select({
+    id: ideas.id,
+    title: ideas.title,
+    description: ideas.description,
+    status: ideas.status,
+    authorId: ideas.authorId,
+    pointsAwarded: ideas.pointsAwarded,
+    approvedById: ideas.approvedById,
+    rejectionReason: ideas.rejectionReason,
+    createdAt: ideas.createdAt,
+    updatedAt: ideas.updatedAt,
+    authorName: users.name,
+    authorAvatarUrl: users.avatarUrl,
+  }).from(ideas)
+    .leftJoin(users, eq(ideas.authorId, users.id))
+    .orderBy(desc(ideas.createdAt));
+}
+
+export async function getIdeaById(db: DrizzleD1Database, id: number) {
+  const result = await db.select({
+    id: ideas.id,
+    title: ideas.title,
+    description: ideas.description,
+    status: ideas.status,
+    authorId: ideas.authorId,
+    pointsAwarded: ideas.pointsAwarded,
+    approvedById: ideas.approvedById,
+    rejectionReason: ideas.rejectionReason,
+    createdAt: ideas.createdAt,
+    updatedAt: ideas.updatedAt,
+    authorName: users.name,
+    authorAvatarUrl: users.avatarUrl,
+  }).from(ideas)
+    .leftJoin(users, eq(ideas.authorId, users.id))
+    .where(eq(ideas.id, id))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateIdea(db: DrizzleD1Database, id: number, data: Partial<{
+  title: string;
+  description: string | null;
+  status: string;
+  pointsAwarded: number;
+  approvedById: number | null;
+  rejectionReason: string | null;
+}>) {
+  await db.update(ideas).set({
+    ...data,
+    updatedAt: new Date().toISOString(),
+  } as any).where(eq(ideas.id, id));
+}
+
+export async function deleteIdea(db: DrizzleD1Database, id: number) {
+  await db.delete(ideas).where(eq(ideas.id, id));
 }
