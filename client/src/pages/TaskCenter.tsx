@@ -135,9 +135,9 @@ export default function TaskCenter() {
         <div className="flex items-center gap-2 mb-3">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filtros</span>
-          {(searchQuery || selectedCollaborator !== "all") && (
+          {(searchQuery || selectedCollaborator !== "all" || activeFilter !== "all") && (
             <button
-              onClick={() => { setSearchQuery(""); setSelectedCollaborator("all"); }}
+              onClick={() => { setSearchQuery(""); setSelectedCollaborator("all"); handleCardClick("all"); }}
               className="ml-auto text-xs text-primary hover:underline flex items-center gap-1"
             >
               <X className="h-3 w-3" /> Limpar filtros
@@ -155,6 +155,23 @@ export default function TaskCenter() {
               className="pl-9 h-10"
             />
           </div>
+
+          {/* Filter by status */}
+          <Select value={activeFilter} onValueChange={(val) => handleCardClick(val)}>
+            <SelectTrigger className="w-full sm:w-[200px] h-10">
+              <SelectValue placeholder="Todos os status" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(statusConfig).map(([key, config]) => (
+                <SelectItem key={key} value={key}>
+                  <div className="flex items-center gap-2">
+                    <config.icon className={`h-3.5 w-3.5 ${config.color}`} />
+                    {config.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* Filter by collaborator */}
           {isAdmin && collaborators && collaborators.length > 0 && (
