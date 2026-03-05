@@ -21,14 +21,16 @@ import {
   logPointsAudit, getPointsAuditLog, getPointsAuditByTask,
   listIdeas, getIdeaById, createIdea, updateIdeaStatus, deleteIdea,
   addHighlightPoints, getHighlightPointsLog, getHighlightPointsByUser,
+  createTaskLog, getTaskLogs, getTaskLogsByCollaborator,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
+  if (!onTime) return 0; // ATRASADA = 0 PONTOS
   const basePoints: Record<string, number> = {
     low: 5, medium: 10, high: 20, urgent: 30,
   };
   const base = basePoints[priority] ?? 10;
-  return onTime ? base + 5 : base;
+  return base + 5; // Bônus de pontualidade
 }
 
 export const appRouter = router({
@@ -342,30 +344,64 @@ export const appRouter = router({
           }
         }
 
-        // Admin approving task (review → completed): award points
-        if (targetStatus === "completed" && task.status === "review") {
+        // ===== COMPLETION LOGIC WITH COMPREHENSIVE LOGGING =====
+        const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
+
+        // Admin approving task (review → completed) OR completing directly: award points
+        if (targetStatus === "completed" && task.status !== "completed") {
           const now = Date.now();
           updateData.completedAt = now;
 
+          const isOverdue = !!(task.dueDate && now > task.dueDate);
           const onTime = !task.dueDate || now <= task.dueDate;
           const totalPoints = calculatePoints(task.priority, onTime);
           updateData.pointsAwarded = totalPoints;
 
-          // AUDIT: log points awarded on approval
+          const completionType = task.status === "review" ? "approved" : "completed_direct";
+          const completionReason = isOverdue
+            ? `Tarefa conclu\u00edda COM ATRASO - pontos ZERADOS (prazo: ${new Date(task.dueDate!).toLocaleDateString("pt-BR")})`
+            : `Tarefa conclu\u00edda no prazo - ${totalPoints} pontos concedidos`;
+
+          // AUDIT: log points awarded on approval/completion
           await logPointsAudit(ctx.db, {
             taskId: task.id, taskTitle: task.title,
             oldPoints: task.pointsAwarded ?? 0, newPoints: totalPoints,
             changedBy: ctx.user.id, changedByName: ctx.user.name,
-            action: "approved", reason: "Tarefa aprovada pelo CEO - pontos concedidos",
+            action: completionType, reason: completionReason,
             statusBefore: task.status, statusAfter: targetStatus,
           });
 
+          // LOG: registrar conclus\u00e3o da tarefa
+          await createTaskLog(ctx.db, {
+            taskId: task.id, taskTitle: task.title,
+            userId: ctx.user.id, userName: ctx.user.name,
+            action: completionType,
+            statusBefore: task.status, statusAfter: targetStatus,
+            pointsBefore: task.pointsAwarded ?? 0, pointsAfter: totalPoints,
+            pointsChange: totalPoints,
+            reason: completionReason,
+            isOverdue, dueDate: task.dueDate, completedAt: now,
+          });
+
           // Divide points among all assignees
-          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
-          if (allAssignees.length > 0) {
+          if (allAssignees.length > 0 && totalPoints > 0) {
             const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
             for (const assignee of allAssignees) {
               await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa "${task.title}"${allAssignees.length > 1 ? ` (${allAssignees.length} colaboradores)` : ""}`, task.id);
+
+              // LOG: pontos concedidos por colaborador
+              await createTaskLog(ctx.db, {
+                taskId: task.id, taskTitle: task.title,
+                userId: ctx.user.id, userName: ctx.user.name,
+                action: "points_awarded",
+                statusBefore: task.status, statusAfter: targetStatus,
+                pointsBefore: 0, pointsAfter: pointsPerPerson,
+                pointsChange: pointsPerPerson,
+                reason: `+${pointsPerPerson} pts para ${(assignee as any).name || "Colaborador"} pela conclus\u00e3o da tarefa`,
+                isOverdue, dueDate: task.dueDate, completedAt: now,
+                affectedUserId: assignee.id, affectedUserName: (assignee as any).name,
+              });
+
               const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
               for (const badge of newBadges) {
                 await logActivity(ctx.db, {
@@ -377,49 +413,41 @@ export const appRouter = router({
                 });
               }
               // Notify assignee that task was approved
-              await createNotification(ctx.db, {
-                userId: assignee.id,
-                type: "task_approved",
-                title: "Tarefa aprovada!",
-                message: `A tarefa "${task.title}" foi aprovada pelo CEO. Você ganhou ${pointsPerPerson} pontos!`,
-                entityType: "task",
-                entityId: task.id,
-              });
-            }
-          }
-        }
-
-        // Admin completing a task directly (not from review) - also award points
-        if (targetStatus === "completed" && task.status !== "completed" && task.status !== "review") {
-          const now = Date.now();
-          updateData.completedAt = now;
-
-          const onTime = !task.dueDate || now <= task.dueDate;
-          const totalPoints = calculatePoints(task.priority, onTime);
-          updateData.pointsAwarded = totalPoints;
-
-          // AUDIT: log points awarded on direct completion
-          await logPointsAudit(ctx.db, {
-            taskId: task.id, taskTitle: task.title,
-            oldPoints: task.pointsAwarded ?? 0, newPoints: totalPoints,
-            changedBy: ctx.user.id, changedByName: ctx.user.name,
-            action: "completed_direct", reason: "Tarefa concluída diretamente pelo admin - pontos concedidos",
-            statusBefore: task.status, statusAfter: targetStatus,
-          });
-
-          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
-          if (allAssignees.length > 0) {
-            const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
-            for (const assignee of allAssignees) {
-              await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa "${task.title}"${allAssignees.length > 1 ? ` (${allAssignees.length} colaboradores)` : ""}`, task.id);
-              const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
-              for (const badge of newBadges) {
-                await logActivity(ctx.db, {
+              if (task.status === "review") {
+                await createNotification(ctx.db, {
                   userId: assignee.id,
-                  action: "earned_badge",
-                  entityType: "badge",
-                  entityId: badge.id,
-                  details: `Conquistou o badge "${badge.name}"`,
+                  type: "task_approved",
+                  title: "Tarefa aprovada!",
+                  message: `A tarefa "${task.title}" foi aprovada pelo CEO. Voc\u00ea ganhou ${pointsPerPerson} pontos!`,
+                  entityType: "task",
+                  entityId: task.id,
+                });
+              }
+            }
+          } else if (allAssignees.length > 0 && totalPoints === 0 && isOverdue) {
+            // LOG: tarefa atrasada, 0 pontos
+            for (const assignee of allAssignees) {
+              await createTaskLog(ctx.db, {
+                taskId: task.id, taskTitle: task.title,
+                userId: ctx.user.id, userName: ctx.user.name,
+                action: "points_zeroed_overdue",
+                statusBefore: task.status, statusAfter: targetStatus,
+                pointsBefore: task.pointsAwarded ?? 0, pointsAfter: 0,
+                pointsChange: 0,
+                reason: `0 pts para ${(assignee as any).name || "Colaborador"} - tarefa conclu\u00edda ap\u00f3s prazo (${new Date(task.dueDate!).toLocaleDateString("pt-BR")})`,
+                isOverdue: true, dueDate: task.dueDate, completedAt: now,
+                affectedUserId: assignee.id, affectedUserName: (assignee as any).name,
+              });
+
+              // Notify assignee that task was completed but with 0 points
+              if (task.status === "review") {
+                await createNotification(ctx.db, {
+                  userId: assignee.id,
+                  type: "task_approved",
+                  title: "Tarefa aprovada (sem pontos)",
+                  message: `A tarefa "${task.title}" foi aprovada, mas como estava atrasada, n\u00e3o houve pontua\u00e7\u00e3o.`,
+                  entityType: "task",
+                  entityId: task.id,
                 });
               }
             }
@@ -435,7 +463,7 @@ export const appRouter = router({
             taskId: task.id, taskTitle: task.title,
             oldPoints: task.pointsAwarded ?? 0, newPoints: 0,
             changedBy: ctx.user.id, changedByName: ctx.user.name,
-            action: "reverted", reason: `Tarefa movida de Concluída para ${targetStatus} - pontos revertidos`,
+            action: "reverted", reason: `Tarefa movida de Conclu\u00edda para ${targetStatus} - pontos revertidos`,
             statusBefore: task.status, statusAfter: targetStatus,
           });
 
@@ -452,6 +480,20 @@ export const appRouter = router({
               entityId: input.id,
               details: `Pontos revertidos (${totalReverted} pts) ao mover tarefa "${task.title}"`,
             });
+
+            // LOG: pontos revertidos
+            for (const entry of revertedEntries) {
+              await createTaskLog(ctx.db, {
+                taskId: task.id, taskTitle: task.title,
+                userId: ctx.user.id, userName: ctx.user.name,
+                action: "points_reverted",
+                statusBefore: task.status, statusAfter: targetStatus,
+                pointsBefore: entry.points, pointsAfter: 0,
+                pointsChange: -entry.points,
+                reason: `Pontos revertidos: -${entry.points} pts (tarefa movida de Conclu\u00edda)`,
+                affectedUserId: entry.userId,
+              });
+            }
           }
         }
 
@@ -461,9 +503,23 @@ export const appRouter = router({
           // DO NOT reset pointsAwarded here - it's the value configured by admin
         }
 
+        // LOG: registrar toda movimenta\u00e7\u00e3o de status (n\u00e3o duplicar se j\u00e1 logou acima)
+        if (targetStatus !== "completed" && task.status !== "completed") {
+          await createTaskLog(ctx.db, {
+            taskId: task.id, taskTitle: task.title,
+            userId: ctx.user.id, userName: ctx.user.name,
+            action: "status_changed",
+            statusBefore: task.status, statusAfter: targetStatus,
+            pointsBefore: task.pointsAwarded ?? 0, pointsAfter: task.pointsAwarded ?? 0,
+            pointsChange: 0,
+            reason: `Status alterado de ${task.status} para ${targetStatus}`,
+            isOverdue: !!(task.dueDate && Date.now() > task.dueDate),
+            dueDate: task.dueDate,
+          });
+        }
+
         // If admin rejects (review → in_progress/pending), notify assignees
         if (task.status === "review" && (targetStatus === "in_progress" || targetStatus === "pending")) {
-          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId }] : []);
           for (const assignee of allAssignees) {
             await createNotification(ctx.db, {
               userId: assignee.id,
@@ -962,6 +1018,38 @@ export const appRouter = router({
           return getPointsAuditByTask(ctx.db, input.taskId);
         }
         return getPointsAuditLog(ctx.db, input.limit || 200);
+      }),
+  }),
+
+  // ===== TASK LOGS (SISTEMA DE LOGS COMPLETO) =====
+  taskLogs: router({
+    list: protectedProcedure
+      .input(z.object({
+        taskId: z.number().optional(),
+        userId: z.number().optional(),
+        affectedUserId: z.number().optional(),
+        action: z.string().optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        // Non-admin can only see their own logs
+        const filters = { ...input };
+        if (ctx.user.role !== "admin") {
+          filters.affectedUserId = ctx.user.id;
+        }
+        return getTaskLogs(ctx.db, filters);
+      }),
+
+    byCollaborator: protectedProcedure
+      .input(z.object({ userId: z.number(), limit: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        return getTaskLogsByCollaborator(ctx.db, input.userId, input.limit || 200);
+      }),
+
+    byTask: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getTaskLogs(ctx.db, { taskId: input.taskId });
       }),
   }),
 

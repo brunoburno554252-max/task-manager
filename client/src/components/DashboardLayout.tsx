@@ -45,7 +45,7 @@ const menuItems = [
   { icon: Trophy, label: "Ranking", path: "/ranking" },
   { icon: Award, label: "Conquistas", path: "/badges" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
-  { icon: Activity, label: "Central de Tarefas", path: "/activity" },
+  { icon: Activity, label: "Central de Tarefas", path: "/tasks" },
   { icon: Lightbulb, label: "Caixa de Ideias", path: "/ideas" },
   { icon: Star, label: "Colaborador Destaque", path: "/highlight" },
   { icon: Settings, label: "Configurações", path: "/settings", adminOnly: true },
@@ -539,7 +539,7 @@ function DashboardLayoutContent({
           <div className="flex items-center gap-2">
             {overdueCount > 0 && (
               <button
-                onClick={() => setLocation("/activity?status=overdue")}
+                onClick={() => setLocation("/tasks?status=overdue")}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-500/10 text-red-500 text-xs font-semibold hover:bg-red-500/15 transition-colors"
               >
                 <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />

@@ -20,7 +20,7 @@ import {
   ArrowLeft, Plus, Trash2, Calendar,
   Clock, CheckCircle2, Circle, Flame, Zap, ArrowUp, ArrowRight,
   ArrowDown, Search, X, MessageSquare, History, Send,
-  Columns3, LayoutGrid, List, Eye, ChevronRight,
+  Columns3, LayoutGrid, List, Eye, ChevronRight, ScrollText,
   ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
   ChevronLeft, Pencil, Users, ZoomIn, ExternalLink, Loader2,
 } from "lucide-react";
@@ -43,7 +43,7 @@ import { RichTextEditor, RichTextViewer } from "@/components/RichTextEditor";
 // ==================== TYPES ====================
 type TaskStatus = "pending" | "in_progress" | "review" | "completed";
 type Priority = "low" | "medium" | "high" | "urgent";
-type ViewMode = "tabs" | "kanban" | "list" | "agenda";
+type ViewMode = "tabs" | "kanban" | "list" | "agenda" | "logs";
 
 type TaskItem = {
   id: number;
@@ -100,6 +100,7 @@ const viewModes: { key: ViewMode; label: string; icon: React.ElementType; desc: 
   { key: "agenda", label: "Agenda", icon: Calendar, desc: "Calendário mensal" },
   { key: "list", label: "Lista", icon: List, desc: "Tabela compacta" },
   { key: "tabs", label: "Abas", icon: LayoutGrid, desc: "Cards por status" },
+  { key: "logs", label: "Logs", icon: ScrollText, desc: "Histórico de movimentações" },
 ];
 
 // ==================== SORTABLE CARD ====================
@@ -2043,6 +2044,11 @@ export default function CollaboratorKanban() {
         );
       })()}
 
+      {/* ===== LOGS VIEW ===== */}
+      {viewMode === "logs" && (() => {
+        return <LogsView userId={userId} />;
+      })()}
+
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-card border-border/30">
@@ -2408,6 +2414,158 @@ export default function CollaboratorKanban() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+
+// ==================== LOGS VIEW COMPONENT ====================
+function LogsView({ userId }: { userId: number }) {
+  const { data: logs, isLoading } = trpc.taskLogs.byCollaborator.useQuery({ userId, limit: 300 });
+  const [logFilter, setLogFilter] = useState<string>("all");
+
+  const actionConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+    approved: { label: "Aprovada", color: "text-emerald-400", bg: "bg-emerald-500/10", icon: CheckCircle2 },
+    completed_direct: { label: "Concluída", color: "text-emerald-400", bg: "bg-emerald-500/10", icon: CheckCircle2 },
+    points_awarded: { label: "Pontos Ganhos", color: "text-amber-400", bg: "bg-amber-500/10", icon: Zap },
+    points_zeroed_overdue: { label: "Pontos Zerados (Atraso)", color: "text-red-400", bg: "bg-red-500/10", icon: Flame },
+    points_reverted: { label: "Pontos Revertidos", color: "text-orange-400", bg: "bg-orange-500/10", icon: History },
+    status_changed: { label: "Status Alterado", color: "text-blue-400", bg: "bg-blue-500/10", icon: ArrowRight },
+  };
+
+  const filteredLogs = useMemo(() => {
+    if (!logs) return [];
+    if (logFilter === "all") return logs;
+    if (logFilter === "points") return logs.filter((l: any) => ["points_awarded", "points_zeroed_overdue", "points_reverted"].includes(l.action));
+    if (logFilter === "overdue") return logs.filter((l: any) => l.isOverdue === 1);
+    if (logFilter === "status") return logs.filter((l: any) => l.action === "status_changed");
+    return logs;
+  }, [logs, logFilter]);
+
+  const totalPointsGained = useMemo(() => {
+    if (!logs) return 0;
+    return logs.filter((l: any) => l.action === "points_awarded" && l.affectedUserId === userId)
+      .reduce((sum: number, l: any) => sum + (l.pointsChange || 0), 0);
+  }, [logs, userId]);
+
+  const totalPointsLost = useMemo(() => {
+    if (!logs) return 0;
+    return logs.filter((l: any) => (l.action === "points_zeroed_overdue" || l.action === "points_reverted") && (l.affectedUserId === userId || l.userId === userId))
+      .reduce((sum: number, l: any) => sum + Math.abs(l.pointsChange || 0), 0);
+  }, [logs, userId]);
+
+  const overdueCount = useMemo(() => {
+    if (!logs) return 0;
+    return logs.filter((l: any) => l.action === "points_zeroed_overdue" && l.affectedUserId === userId).length;
+  }, [logs, userId]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="h-16 rounded-xl bg-card/50 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="stat-card p-4 text-center" style={{ "--stat-accent": "oklch(0.72 0.18 90)" } as React.CSSProperties}>
+          <Zap className="h-5 w-5 text-amber-400 mx-auto mb-1" />
+          <p className="text-xl font-bold text-amber-400">+{totalPointsGained}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pontos Ganhos</p>
+        </div>
+        <div className="stat-card p-4 text-center" style={{ "--stat-accent": "oklch(0.65 0.22 25)" } as React.CSSProperties}>
+          <Flame className="h-5 w-5 text-red-400 mx-auto mb-1" />
+          <p className="text-xl font-bold text-red-400">-{totalPointsLost}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pontos Perdidos</p>
+        </div>
+        <div className="stat-card p-4 text-center" style={{ "--stat-accent": "oklch(0.65 0.18 25)" } as React.CSSProperties}>
+          <Clock className="h-5 w-5 text-orange-400 mx-auto mb-1" />
+          <p className="text-xl font-bold text-orange-400">{overdueCount}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tarefas Atrasadas</p>
+        </div>
+      </div>
+
+      {/* Filter Buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {[
+          { key: "all", label: "Todos" },
+          { key: "points", label: "Pontos" },
+          { key: "overdue", label: "Atrasos" },
+          { key: "status", label: "Movimentações" },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setLogFilter(f.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              logFilter === f.key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-card/60 text-muted-foreground hover:bg-muted/30 border border-border/20"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] text-muted-foreground">{filteredLogs.length} registro{filteredLogs.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* Log Entries */}
+      {filteredLogs.length === 0 ? (
+        <div className="stat-card p-8 text-center" style={{ "--stat-accent": "oklch(0.65 0.15 270)" } as React.CSSProperties}>
+          <ScrollText className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="text-muted-foreground text-sm">Nenhum registro encontrado</p>
+        </div>
+      ) : (
+        <div className="stat-card overflow-hidden" style={{ "--stat-accent": "oklch(0.65 0.15 270)" } as React.CSSProperties}>
+          <div className="divide-y divide-border/20">
+            {filteredLogs.map((log: any) => {
+              const config = actionConfig[log.action] || { label: log.action, color: "text-muted-foreground", bg: "bg-muted/10", icon: Circle };
+              const logDate = new Date(log.createdAt);
+              return (
+                <div key={log.id} className="p-3 hover:bg-muted/5 transition-colors">
+                  <div className="flex items-start gap-3">
+                    {/* Icon */}
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${config.bg}`}>
+                      <config.icon className={`h-4 w-4 ${config.color}`} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs font-semibold ${config.color}`}>{config.label}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">#{log.taskId}</span>
+                        {log.isOverdue === 1 && (
+                          <Badge variant="destructive" className="text-[9px] h-4 px-1.5">ATRASADA</Badge>
+                        )}
+                        {log.pointsChange !== 0 && (
+                          <span className={`text-xs font-bold ${log.pointsChange > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {log.pointsChange > 0 ? "+" : ""}{log.pointsChange} pts
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-foreground/80 mt-0.5 truncate">{log.taskTitle}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{log.reason}</p>
+                      {log.affectedUserName && (
+                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">Colaborador: {log.affectedUserName}</p>
+                      )}
+                    </div>
+
+                    {/* Date */}
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground">{logDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
+                      <p className="text-[10px] text-muted-foreground/60">{logDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -101,3 +101,27 @@ export const chatMessages = mysqlTable("chat_messages", {
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
+
+// ===== SISTEMA DE LOGS COMPLETO =====
+export const taskLogs = mysqlTable("task_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  taskTitle: varchar("taskTitle", { length: 255 }).notNull(),
+  userId: int("userId").notNull(),
+  userName: text("userName"),
+  action: varchar("action", { length: 50 }).notNull(),
+  statusBefore: varchar("statusBefore", { length: 50 }),
+  statusAfter: varchar("statusAfter", { length: 50 }),
+  pointsBefore: int("pointsBefore").default(0).notNull(),
+  pointsAfter: int("pointsAfter").default(0).notNull(),
+  pointsChange: int("pointsChange").default(0).notNull(),
+  reason: text("reason").notNull(),
+  isOverdue: int("isOverdue").default(0).notNull(),
+  dueDate: bigint("dueDate", { mode: "number" }),
+  completedAt: bigint("completedAt", { mode: "number" }),
+  affectedUserId: int("affectedUserId"),
+  affectedUserName: text("affectedUserName"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type TaskLog = typeof taskLogs.$inferSelect;
+export type InsertTaskLog = typeof taskLogs.$inferInsert;

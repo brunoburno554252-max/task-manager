@@ -86,13 +86,15 @@ export default function Home() {
       icon: ListTodo,
       accent: "oklch(0.72 0.19 280)",
       iconColor: "text-primary",
+      filterStatus: "all",
     },
     {
-      label: "Concluídas",
+      label: "Conclu\u00eddas",
       value: stats?.completed ?? 0,
       icon: CheckCircle2,
       accent: "oklch(0.7 0.18 170)",
       iconColor: "text-emerald-400",
+      filterStatus: "completed",
     },
     {
       label: "Em Andamento",
@@ -100,6 +102,7 @@ export default function Home() {
       icon: Clock,
       accent: "oklch(0.65 0.18 240)",
       iconColor: "text-blue-400",
+      filterStatus: "in_progress",
     },
     {
       label: "Atrasadas",
@@ -107,6 +110,7 @@ export default function Home() {
       icon: AlertTriangle,
       accent: "oklch(0.65 0.22 25)",
       iconColor: "text-red-400",
+      filterStatus: "overdue",
     },
   ];
 
@@ -130,19 +134,23 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {/* Stat Cards - Clic\u00e1veis */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {statCards.map((card) => (
           <div
             key={card.label}
-            className="stat-card p-4"
+            onClick={() => setLocation(card.filterStatus === "all" ? "/tasks" : `/tasks?status=${card.filterStatus}`)}
+            className="stat-card p-4 cursor-pointer hover:scale-[1.02] hover:shadow-lg transition-all group"
             style={{ "--stat-accent": card.accent } as React.CSSProperties}
           >
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-muted-foreground font-medium">{card.label}</span>
               <card.icon className={`h-4 w-4 ${card.iconColor}`} />
             </div>
-            <p className="text-3xl font-bold tracking-tight">{card.value}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-3xl font-bold tracking-tight">{card.value}</p>
+              <ArrowRight className="h-4 w-4 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-all" />
+            </div>
           </div>
         ))}
       </div>
@@ -318,7 +326,7 @@ export default function Home() {
               Atividades Recentes
             </h3>
             <button
-              onClick={() => setLocation("/activity")}
+              onClick={() => setLocation("/tasks")}
               className="text-xs text-primary hover:underline flex items-center gap-1"
             >
               Ver tudo <ArrowRight className="h-3 w-3" />

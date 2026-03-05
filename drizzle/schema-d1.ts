@@ -216,6 +216,31 @@ export const ideas = sqliteTable("ideas", {
 export type Idea = typeof ideas.$inferSelect;
 export type InsertIdea = typeof ideas.$inferInsert;
 
+// ===== SISTEMA DE LOGS COMPLETO =====
+export const taskLogs = sqliteTable("task_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("taskId").notNull(),
+  taskTitle: text("taskTitle").notNull(),
+  userId: integer("userId").notNull(),
+  userName: text("userName"),
+  action: text("action").notNull(),
+  statusBefore: text("statusBefore"),
+  statusAfter: text("statusAfter"),
+  pointsBefore: integer("pointsBefore").default(0).notNull(),
+  pointsAfter: integer("pointsAfter").default(0).notNull(),
+  pointsChange: integer("pointsChange").default(0).notNull(),
+  reason: text("reason").notNull(),
+  isOverdue: integer("isOverdue").default(0).notNull(),
+  dueDate: integer("dueDate"),
+  completedAt: integer("completedAt"),
+  affectedUserId: integer("affectedUserId"),
+  affectedUserName: text("affectedUserName"),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type TaskLog = typeof taskLogs.$inferSelect;
+export type InsertTaskLog = typeof taskLogs.$inferInsert;
+
 // ===== COLABORADOR DESTAQUE (pontos livres) =====
 export const highlightPoints = sqliteTable("highlight_points", {
   id: integer("id").primaryKey({ autoIncrement: true }),

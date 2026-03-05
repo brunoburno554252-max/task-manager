@@ -21,6 +21,7 @@ const Cadastros = lazy(() => import("./pages/Cadastros"));
 const Companies = lazy(() => import("./pages/Companies"));
 const IdeasBox = lazy(() => import("./pages/IdeasBox"));
 const HighlightCollaborator = lazy(() => import("./pages/HighlightCollaborator"));
+const TaskCenter = lazy(() => import("./pages/TaskCenter"));
 
 function PageLoader() {
   return (
@@ -47,6 +48,7 @@ function Router() {
           <Route path={"/ranking"} component={Ranking} />
           <Route path={"/badges"} component={Badges} />
           <Route path={"/activity"} component={ActivityPage} />
+          <Route path={"/tasks"} component={TaskCenter} />
           <Route path={"/chat"} component={Chat} />
           <Route path={"/profile"} component={Profile} />
           <Route path={"/settings"} component={AdminSettings} />

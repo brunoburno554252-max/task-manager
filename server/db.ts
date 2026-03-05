@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, tasks, InsertTask, Task,
   pointsLog, badges, userBadges, activityLog,
-  Badge, taskComments, chatMessages,
+  Badge, taskComments, chatMessages, taskLogs,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -547,5 +547,89 @@ export async function getChatMessages(limit: number = 100, beforeId?: number) {
     .leftJoin(users, eq(chatMessages.userId, users.id))
     .where(where)
     .orderBy(desc(chatMessages.createdAt))
+    .limit(limit);
+}
+
+
+// ============ TASK LOGS (SISTEMA DE LOGS COMPLETO) ============
+export async function createTaskLog(data: {
+  taskId: number;
+  taskTitle: string;
+  userId: number;
+  userName: string | null;
+  action: string;
+  statusBefore?: string | null;
+  statusAfter?: string | null;
+  pointsBefore?: number;
+  pointsAfter?: number;
+  pointsChange?: number;
+  reason: string;
+  isOverdue?: boolean;
+  dueDate?: number | null;
+  completedAt?: number | null;
+  affectedUserId?: number | null;
+  affectedUserName?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(taskLogs).values({
+    taskId: data.taskId,
+    taskTitle: data.taskTitle,
+    userId: data.userId,
+    userName: data.userName,
+    action: data.action,
+    statusBefore: data.statusBefore || null,
+    statusAfter: data.statusAfter || null,
+    pointsBefore: data.pointsBefore ?? 0,
+    pointsAfter: data.pointsAfter ?? 0,
+    pointsChange: data.pointsChange ?? 0,
+    reason: data.reason,
+    isOverdue: data.isOverdue ? 1 : 0,
+    dueDate: data.dueDate ?? null,
+    completedAt: data.completedAt ?? null,
+    affectedUserId: data.affectedUserId ?? null,
+    affectedUserName: data.affectedUserName ?? null,
+  });
+}
+
+export async function getTaskLogs(filters?: {
+  taskId?: number;
+  userId?: number;
+  affectedUserId?: number;
+  action?: string;
+  limit?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (filters?.taskId) conditions.push(eq(taskLogs.taskId, filters.taskId));
+  if (filters?.userId) conditions.push(eq(taskLogs.userId, filters.userId));
+  if (filters?.affectedUserId) {
+    conditions.push(
+      or(
+        eq(taskLogs.affectedUserId, filters.affectedUserId),
+        eq(taskLogs.userId, filters.affectedUserId)
+      )
+    );
+  }
+  if (filters?.action) conditions.push(eq(taskLogs.action, filters.action));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(taskLogs)
+    .where(where)
+    .orderBy(desc(taskLogs.createdAt))
+    .limit(filters?.limit ?? 200);
+}
+
+export async function getTaskLogsByCollaborator(userId: number, limit: number = 200) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(taskLogs)
+    .where(
+      or(
+        eq(taskLogs.affectedUserId, userId),
+        eq(taskLogs.userId, userId)
+      )
+    )
+    .orderBy(desc(taskLogs.createdAt))
     .limit(limit);
 }

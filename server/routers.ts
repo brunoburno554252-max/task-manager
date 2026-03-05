@@ -11,6 +11,7 @@ import {
   getUserById, createComment, getCommentsByTaskId, deleteComment,
   getTaskActivities, getCollaboratorsWithStats,
   sendChatMessage, getChatMessages, updateUser,
+  createTaskLog, getTaskLogs, getTaskLogsByCollaborator,
 } from "./db";
 import { notifyTaskCreated, notifyStatusChanged } from "./whatsapp";
 
@@ -19,6 +20,7 @@ seedBadges().catch(console.error);
 
 // Points calculation
 function calculatePoints(priority: string, onTime: boolean): number {
+  if (!onTime) return 0; // ATRASADA = 0 PONTOS
   const basePoints: Record<string, number> = {
     low: 5,
     medium: 10,
@@ -26,7 +28,7 @@ function calculatePoints(priority: string, onTime: boolean): number {
     urgent: 30,
   };
   const base = basePoints[priority] ?? 10;
-  return onTime ? base + 5 : base;
+  return base + 5; // Bônus de pontualidade
 }
 
 export const appRouter = router({
@@ -385,6 +387,36 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const result = await sendChatMessage(ctx.user.id, input.content);
         return result;
+      }),
+  }),
+  // ===== TASK LOGS (SISTEMA DE LOGS COMPLETO) =====
+  taskLogs: router({
+    list: protectedProcedure
+      .input(z.object({
+        taskId: z.number().optional(),
+        userId: z.number().optional(),
+        affectedUserId: z.number().optional(),
+        action: z.string().optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const filters = { ...input };
+        if (ctx.user.role !== "admin") {
+          filters.affectedUserId = ctx.user.id;
+        }
+        return getTaskLogs(filters);
+      }),
+
+    byCollaborator: protectedProcedure
+      .input(z.object({ userId: z.number(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getTaskLogsByCollaborator(input.userId, input.limit || 200);
+      }),
+
+    byTask: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ input }) => {
+        return getTaskLogs({ taskId: input.taskId });
       }),
   }),
 });
