@@ -20,6 +20,7 @@ const AdminSettings = lazy(() => import("./pages/AdminSettings"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
 const Companies = lazy(() => import("./pages/Companies"));
 const IdeasBox = lazy(() => import("./pages/IdeasBox"));
+const HighlightCollaborator = lazy(() => import("./pages/HighlightCollaborator"));
 
 function PageLoader() {
   return (
@@ -50,6 +51,7 @@ function Router() {
           <Route path={"/profile"} component={Profile} />
           <Route path={"/settings"} component={AdminSettings} />
           <Route path={"/ideas"} component={IdeasBox} />
+          <Route path={"/highlight"} component={HighlightCollaborator} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

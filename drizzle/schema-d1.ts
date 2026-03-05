@@ -23,7 +23,7 @@ export const tasks = sqliteTable("tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   description: text("description"),
-  status: text("status", { enum: ["pending", "in_progress", "completed"] }).default("pending").notNull(),
+  status: text("status", { enum: ["pending", "in_progress", "review", "completed"] }).default("pending").notNull(),
   priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).default("medium").notNull(),
   assigneeId: integer("assigneeId"),
   createdById: integer("createdById").notNull(),
@@ -51,6 +51,23 @@ export const pointsLog = sqliteTable("points_log", {
 });
 
 export type PointsLog = typeof pointsLog.$inferSelect;
+
+export const pointsAudit = sqliteTable("points_audit", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("taskId").notNull(),
+  taskTitle: text("taskTitle").notNull(),
+  oldPoints: integer("oldPoints").notNull(),
+  newPoints: integer("newPoints").notNull(),
+  changedBy: integer("changedBy").notNull(),
+  changedByName: text("changedByName"),
+  action: text("action").notNull(),
+  reason: text("reason").notNull(),
+  statusBefore: text("statusBefore"),
+  statusAfter: text("statusAfter"),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type PointsAudit = typeof pointsAudit.$inferSelect;
 
 export const badges = sqliteTable("badges", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -167,6 +184,21 @@ export const companyMembers = sqliteTable("company_members", {
 export type CompanyMember = typeof companyMembers.$inferSelect;
 export type InsertCompanyMember = typeof companyMembers.$inferInsert;
 
+export const notifications = sqliteTable("notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  entityType: text("entityType"),
+  entityId: integer("entityId"),
+  isRead: integer("isRead").default(0).notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
 // ===== CAIXA DE IDEIAS =====
 export const ideas = sqliteTable("ideas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -183,3 +215,16 @@ export const ideas = sqliteTable("ideas", {
 
 export type Idea = typeof ideas.$inferSelect;
 export type InsertIdea = typeof ideas.$inferInsert;
+
+// ===== COLABORADOR DESTAQUE (pontos livres) =====
+export const highlightPoints = sqliteTable("highlight_points", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  points: integer("points").notNull(),
+  reason: text("reason").notNull(),
+  awardedById: integer("awardedById").notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type HighlightPoint = typeof highlightPoints.$inferSelect;
+export type InsertHighlightPoint = typeof highlightPoints.$inferInsert;

@@ -160,12 +160,19 @@ function getAvatarColor(id: number): string {
 
 function getDueDateInfo(dueDate: number | null, status: TaskStatus) {
   if (!dueDate || status === "completed") return { label: "", urgency: "none" as const, color: "", bg: "", icon: Calendar };
-  const diff = dueDate - Date.now();
-  const days = Math.ceil(diff / 86400000);
-  if (diff < 0) return { label: `${Math.abs(days)}d atrasado`, urgency: "overdue" as const, color: "text-red-400", bg: "bg-red-500/15 border-red-500/30", icon: AlertTriangle };
-  if (days === 0) return { label: "Vence hoje!", urgency: "today" as const, color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/30", icon: Timer };
-  if (days <= 2) return { label: `Vence em ${days}d`, urgency: "soon" as const, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", icon: Clock };
-  if (days <= 7) return { label: `${days} dias`, urgency: "normal" as const, color: "text-muted-foreground", bg: "bg-muted/40 border-border/30", icon: Calendar };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const taskDueDate = new Date(dueDate);
+  taskDueDate.setHours(0, 0, 0, 0);
+
+  const diffTime = taskDueDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffTime < 0) return { label: `${Math.abs(diffDays)}d atrasado`, urgency: "overdue" as const, color: "text-red-400", bg: "bg-red-500/15 border-red-500/30", icon: AlertTriangle };
+  if (diffDays === 0) return { label: "Vence hoje!", urgency: "today" as const, color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/30", icon: Timer };
+  if (diffDays <= 2) return { label: `Vence em ${diffDays}d`, urgency: "soon" as const, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", icon: Clock };
+  if (diffDays <= 7) return { label: `${diffDays} dias`, urgency: "normal" as const, color: "text-muted-foreground", bg: "bg-muted/40 border-border/30", icon: Calendar };
   return { label: new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), urgency: "normal" as const, color: "text-muted-foreground", bg: "bg-muted/40 border-border/30", icon: CalendarDays };
 }
 

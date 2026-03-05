@@ -1,23 +1,26 @@
 import { eq } from "drizzle-orm";
-import { users } from "../drizzle/schema-d1";
+import { users, tasks, pointsLog } from "../drizzle/schema-d1";
 import { publicProcedure, router, protectedProcedure, adminProcedure } from "./trpc";
 import { z } from "zod";
 import {
   createTask, getTaskById, listTasks, updateTask, deleteTask, reorderTasks,
-  getAllUsers, addPoints, getUserPoints, getRanking,
+  getAllUsers, addPoints, getUserPoints, revertPointsByTaskId, getRanking,
   getAllBadges, getUserBadges, checkAndAwardBadges, seedBadges,
   logActivity, getActivityLog, getDashboardStats, getRecentCompletions,
   getUserById, createComment, getCommentsByTaskId, deleteComment,
-  getTaskActivities, getCollaboratorsWithStats, getCollaboratorsWithStatsByCompany,
-  sendChatMessage, getChatMessages, updateUser,
+  getTaskActivities,  getCollaboratorsWithStats, getCompanyCollaboratorsWithStats,  sendChatMessage, getChatMessages, updateUser,
   getChecklistByTaskId, createChecklistItem, createChecklistItems,
   updateChecklistItem, deleteChecklistItem, deleteChecklistByTaskId,
   getAttachmentsByTaskId, getAttachmentById, createAttachment,
   deleteAttachment, deleteAttachmentsByTaskId,
-  getAllCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, getCompaniesWithStats,
-  getCompanyMembers, addCompanyMember, removeCompanyMember, getCompanyCollaboratorsWithStats,
+  getAllCompanies, getCompaniesWithStats, getCompanyById, createCompany, updateCompany, deleteCompany,
+  getCompanyMembers, addCompanyMember, removeCompanyMember,
   getTaskAssignees, setTaskAssignees,
-  createIdea, listIdeas, getIdeaById, updateIdea, deleteIdea,
+  createNotification, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+  getManualPointsLog,
+  logPointsAudit, getPointsAuditLog, getPointsAuditByTask,
+  listIdeas, getIdeaById, createIdea, updateIdeaStatus, deleteIdea,
+  addHighlightPoints, getHighlightPointsLog, getHighlightPointsByUser,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -252,6 +255,26 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") {
           throw new Error("Apenas administradores podem editar tarefas");
         }
+
+        // Audit: log points change if pointsAwarded is being modified
+        if (data.pointsAwarded !== undefined) {
+          const existingTask = await getTaskById(ctx.db, id);
+          if (existingTask && existingTask.pointsAwarded !== data.pointsAwarded) {
+            await logPointsAudit(ctx.db, {
+              taskId: id,
+              taskTitle: existingTask.title,
+              oldPoints: existingTask.pointsAwarded ?? 0,
+              newPoints: data.pointsAwarded,
+              changedBy: ctx.user.id,
+              changedByName: ctx.user.name,
+              action: "manual_edit",
+              reason: `Admin editou pontos da tarefa manualmente`,
+              statusBefore: existingTask.status,
+              statusAfter: existingTask.status,
+            });
+          }
+        }
+
         await updateTask(ctx.db, id, data);
         // Update assignees if provided
         if (assigneeIds !== undefined) {
@@ -270,7 +293,7 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(["pending", "in_progress", "completed"]),
+        status: z.enum(["pending", "in_progress", "review", "completed"]),
       }))
       .mutation(async ({ ctx, input }) => {
         const task = await getTaskById(ctx.db, input.id);
@@ -283,57 +306,174 @@ export const appRouter = router({
           throw new Error("Sem permissão para alterar o status desta tarefa");
         }
 
-        const updateData: Record<string, unknown> = { status: input.status };
+        // Non-admin users trying to set "completed" should go to "review" instead
+        let targetStatus = input.status;
+        if (targetStatus === "completed" && ctx.user.role !== "admin") {
+          targetStatus = "review";
+        }
 
-        if (input.status === "completed" && task.status !== "completed") {
-          const now = Date.now();
-          updateData.completedAt = now;
+        // Only admin can approve (move from review to completed)
+        if (task.status === "review" && targetStatus === "completed" && ctx.user.role !== "admin") {
+          throw new Error("Apenas o administrador pode aprovar tarefas em análise");
+        }
 
-          const onTime = !task.dueDate || now <= task.dueDate;
+        const updateData: Record<string, unknown> = { status: targetStatus };
 
-          // Se a tarefa está atrasada, os pontos são ZERADOS
-          if (!onTime) {
-            updateData.pointsAwarded = 0;
-          } else {
-            const totalPoints = calculatePoints(task.priority, onTime);
-            updateData.pointsAwarded = totalPoints;
-          }
+        // When task enters "review" status, notify all admins
+        if (targetStatus === "review" && task.status !== "review") {
+          // Get all admin users to notify them
+          // Find the assignee to include in the notification for navigation
+          const taskAssignees = await getTaskAssignees(ctx.db, task.id);
+          const primaryAssignee = taskAssignees.length > 0 ? taskAssignees[0] : (task.assigneeId ? { id: task.assigneeId, name: '' } : null);
+          const assigneeId = primaryAssignee?.id || ctx.user.id;
+          const assigneeName = ctx.user.name || 'Um colaborador';
 
-          // Divide points among all assignees (somente se não está atrasada)
-          if (onTime) {
-            const totalPoints = updateData.pointsAwarded as number;
-            const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
-            if (allAssignees.length > 0) {
-              const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
-              for (const assignee of allAssignees) {
-                await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa em conjunto "${task.title}" (${allAssignees.length} colaboradores)`, task.id);
-                const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
-                for (const badge of newBadges) {
-                  await logActivity(ctx.db, {
-                    userId: assignee.id,
-                    action: "earned_badge",
-                    entityType: "badge",
-                    entityId: badge.id,
-                    details: `Conquistou o badge "${badge.name}"`,
-                  });
-                }
-              }
-            }
-          } else {
-            // Tarefa atrasada: registrar no log que os pontos foram zerados
-            await logActivity(ctx.db, {
-              userId: ctx.user.id,
-              action: "points_zeroed",
+          const allUsers = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+          const admins = allUsers.filter(u => u.role === "admin");
+          for (const admin of admins) {
+            await createNotification(ctx.db, {
+              userId: admin.id,
+              type: "task_review",
+              title: "Tarefa aguardando aprovação",
+              message: `${assigneeName} enviou a tarefa "${task.title}" para análise. Clique para revisar.`,
               entityType: "task",
-              entityId: input.id,
-              details: `Pontos zerados por atraso na tarefa "${task.title}"`,
+              entityId: task.id,
             });
           }
         }
 
-        if (input.status !== "completed") {
+        // Admin approving task (review → completed): award points
+        if (targetStatus === "completed" && task.status === "review") {
+          const now = Date.now();
+          updateData.completedAt = now;
+
+          const onTime = !task.dueDate || now <= task.dueDate;
+          const totalPoints = calculatePoints(task.priority, onTime);
+          updateData.pointsAwarded = totalPoints;
+
+          // AUDIT: log points awarded on approval
+          await logPointsAudit(ctx.db, {
+            taskId: task.id, taskTitle: task.title,
+            oldPoints: task.pointsAwarded ?? 0, newPoints: totalPoints,
+            changedBy: ctx.user.id, changedByName: ctx.user.name,
+            action: "approved", reason: "Tarefa aprovada pelo CEO - pontos concedidos",
+            statusBefore: task.status, statusAfter: targetStatus,
+          });
+
+          // Divide points among all assignees
+          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
+          if (allAssignees.length > 0) {
+            const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
+            for (const assignee of allAssignees) {
+              await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa "${task.title}"${allAssignees.length > 1 ? ` (${allAssignees.length} colaboradores)` : ""}`, task.id);
+              const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
+              for (const badge of newBadges) {
+                await logActivity(ctx.db, {
+                  userId: assignee.id,
+                  action: "earned_badge",
+                  entityType: "badge",
+                  entityId: badge.id,
+                  details: `Conquistou o badge "${badge.name}"`,
+                });
+              }
+              // Notify assignee that task was approved
+              await createNotification(ctx.db, {
+                userId: assignee.id,
+                type: "task_approved",
+                title: "Tarefa aprovada!",
+                message: `A tarefa "${task.title}" foi aprovada pelo CEO. Você ganhou ${pointsPerPerson} pontos!`,
+                entityType: "task",
+                entityId: task.id,
+              });
+            }
+          }
+        }
+
+        // Admin completing a task directly (not from review) - also award points
+        if (targetStatus === "completed" && task.status !== "completed" && task.status !== "review") {
+          const now = Date.now();
+          updateData.completedAt = now;
+
+          const onTime = !task.dueDate || now <= task.dueDate;
+          const totalPoints = calculatePoints(task.priority, onTime);
+          updateData.pointsAwarded = totalPoints;
+
+          // AUDIT: log points awarded on direct completion
+          await logPointsAudit(ctx.db, {
+            taskId: task.id, taskTitle: task.title,
+            oldPoints: task.pointsAwarded ?? 0, newPoints: totalPoints,
+            changedBy: ctx.user.id, changedByName: ctx.user.name,
+            action: "completed_direct", reason: "Tarefa concluída diretamente pelo admin - pontos concedidos",
+            statusBefore: task.status, statusAfter: targetStatus,
+          });
+
+          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId, name: '', avatarUrl: null }] : []);
+          if (allAssignees.length > 0) {
+            const pointsPerPerson = Math.max(1, Math.round(totalPoints / allAssignees.length));
+            for (const assignee of allAssignees) {
+              await addPoints(ctx.db, assignee.id, pointsPerPerson, `Completou tarefa "${task.title}"${allAssignees.length > 1 ? ` (${allAssignees.length} colaboradores)` : ""}`, task.id);
+              const newBadges = await checkAndAwardBadges(ctx.db, assignee.id);
+              for (const badge of newBadges) {
+                await logActivity(ctx.db, {
+                  userId: assignee.id,
+                  action: "earned_badge",
+                  entityType: "badge",
+                  entityId: badge.id,
+                  details: `Conquistou o badge "${badge.name}"`,
+                });
+              }
+            }
+          }
+        }
+
+        // If task was completed and is now being moved back, revert the awarded points from users
+        if (task.status === "completed" && targetStatus !== "completed") {
           updateData.completedAt = null;
+
+          // AUDIT: log points reverted
+          await logPointsAudit(ctx.db, {
+            taskId: task.id, taskTitle: task.title,
+            oldPoints: task.pointsAwarded ?? 0, newPoints: 0,
+            changedBy: ctx.user.id, changedByName: ctx.user.name,
+            action: "reverted", reason: `Tarefa movida de Concluída para ${targetStatus} - pontos revertidos`,
+            statusBefore: task.status, statusAfter: targetStatus,
+          });
+
+          // Only reset pointsAwarded to 0 if the task had been completed (points were distributed)
           updateData.pointsAwarded = 0;
+
+          const revertedEntries = await revertPointsByTaskId(ctx.db, input.id);
+          if (revertedEntries.length > 0) {
+            const totalReverted = revertedEntries.reduce((sum, e) => sum + e.points, 0);
+            await logActivity(ctx.db, {
+              userId: ctx.user.id,
+              action: "points_reverted",
+              entityType: "task",
+              entityId: input.id,
+              details: `Pontos revertidos (${totalReverted} pts) ao mover tarefa "${task.title}"`,
+            });
+          }
+        }
+
+        // Clear completedAt when moving away from completed (but NOT pointsAwarded - that's the configured value)
+        if (targetStatus !== "completed" && task.status !== "completed") {
+          updateData.completedAt = null;
+          // DO NOT reset pointsAwarded here - it's the value configured by admin
+        }
+
+        // If admin rejects (review → in_progress/pending), notify assignees
+        if (task.status === "review" && (targetStatus === "in_progress" || targetStatus === "pending")) {
+          const allAssignees = assignees.length > 0 ? assignees : (task.assigneeId ? [{ id: task.assigneeId }] : []);
+          for (const assignee of allAssignees) {
+            await createNotification(ctx.db, {
+              userId: assignee.id,
+              type: "task_rejected",
+              title: "Tarefa devolvida",
+              message: `A tarefa "${task.title}" foi devolvida pelo CEO para ajustes.`,
+              entityType: "task",
+              entityId: task.id,
+            });
+          }
         }
 
         await updateTask(ctx.db, input.id, updateData as any);
@@ -341,6 +481,7 @@ export const appRouter = router({
         const statusLabels: Record<string, string> = {
           pending: "Pendente",
           in_progress: "Em Andamento",
+          review: "Em Análise",
           completed: "Concluída",
         };
 
@@ -349,7 +490,7 @@ export const appRouter = router({
           action: "status_changed",
           entityType: "task",
           entityId: input.id,
-          details: `Alterou status para "${statusLabels[input.status]}"`,
+          details: `Alterou status para "${statusLabels[targetStatus]}"`,
         });
 
         return { success: true };
@@ -521,6 +662,11 @@ export const appRouter = router({
     ranking: protectedProcedure.query(async ({ ctx }) => {
       return getRanking(ctx.db);
     }),
+    manualPointsLog: adminProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        return getManualPointsLog(ctx.db, input.limit || 100);
+      }),
     badges: protectedProcedure.query(async ({ ctx }) => {
       return getAllBadges(ctx.db);
     }),
@@ -618,7 +764,29 @@ export const appRouter = router({
         companyId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return sendChatMessage(ctx.db, ctx.user.id, input.content, input.companyId || undefined);
+        const msg = await sendChatMessage(ctx.db, ctx.user.id, input.content, input.companyId || undefined);
+
+        // Notify all other users about the new chat message
+        try {
+          const allUsers = await ctx.db.select({ id: users.id }).from(users);
+          const otherUsers = allUsers.filter(u => u.id !== ctx.user.id);
+          const preview = input.content.length > 80 ? input.content.substring(0, 80) + "..." : input.content;
+          for (const u of otherUsers) {
+            await createNotification(ctx.db, {
+              userId: u.id,
+              type: "chat_message",
+              title: `Nova mensagem de ${ctx.user.name || "Alguém"}`,
+              message: preview,
+              entityType: "chat",
+              entityId: 0,
+            });
+          }
+        } catch (e) {
+          // Don't fail the message send if notifications fail
+          console.error("Failed to create chat notifications:", e);
+        }
+
+        return msg;
       }),
   }),
 
@@ -717,6 +885,87 @@ export const appRouter = router({
       }),
   }),
 
+  notifications: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getNotifications(ctx.db, ctx.user.id);
+    }),
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      return getUnreadNotificationCount(ctx.db, ctx.user.id);
+    }),
+    markRead: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await markNotificationRead(ctx.db, input.id);
+        return { success: true };
+      }),
+    markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+      await markAllNotificationsRead(ctx.db, ctx.user.id);
+      return { success: true };
+    }),
+  }),
+
+  admin: router({
+    fixOrphanedPoints: adminProcedure
+      .mutation(async ({ ctx }) => {
+        // Find tasks that are NOT completed but have points_log entries
+        // These are cases where the bug already happened
+        const allTasks = await ctx.db.select().from(tasks);
+        const nonCompletedWithPoints = allTasks.filter(
+          (t: any) => t.status !== "completed" && t.id
+        );
+
+        let fixedCount = 0;
+        let totalPointsReverted = 0;
+        const fixes: Array<{ taskId: number; title: string; pointsReverted: number; usersAffected: number }> = [];
+
+        for (const task of nonCompletedWithPoints) {
+          // Check if there are points_log entries for this task
+          const entries = await ctx.db.select().from(pointsLog)
+            .where(eq(pointsLog.taskId, task.id));
+
+          if (entries.length > 0) {
+            // Revert points
+            const reverted = await revertPointsByTaskId(ctx.db, task.id);
+            const pointsSum = reverted.reduce((sum: number, e: any) => sum + e.points, 0);
+            
+            // Also reset pointsAwarded on the task
+            await updateTask(ctx.db, task.id, { pointsAwarded: 0 } as any);
+
+            fixedCount++;
+            totalPointsReverted += pointsSum;
+            fixes.push({
+              taskId: task.id,
+              title: task.title,
+              pointsReverted: pointsSum,
+              usersAffected: reverted.length,
+            });
+          }
+        }
+
+        if (fixedCount > 0) {
+          await logActivity(ctx.db, {
+            userId: ctx.user.id,
+            action: "admin_fix",
+            entityType: "system",
+            entityId: 0,
+            details: `Corrigiu ${fixedCount} tarefa(s) com pontos órfãos. Total revertido: ${totalPointsReverted} pts`,
+          });
+        }
+
+        return { fixedCount, totalPointsReverted, fixes };
+      }),
+
+    pointsAuditLog: adminProcedure
+      .input(z.object({ limit: z.number().optional(), taskId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        if (input.taskId) {
+          return getPointsAuditByTask(ctx.db, input.taskId);
+        }
+        return getPointsAuditLog(ctx.db, input.limit || 200);
+      }),
+  }),
+
+  // ===== CAIXA DE IDEIAS =====
   ideas: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return listIdeas(ctx.db);
@@ -730,85 +979,157 @@ export const appRouter = router({
 
     create: protectedProcedure
       .input(z.object({
-        title: z.string().min(1).max(255),
-        description: z.string().optional(),
+        title: z.string().min(1).max(500),
+        description: z.string().max(5000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const result = await createIdea(ctx.db, {
+        const idea = await createIdea(ctx.db, {
           title: input.title,
           description: input.description,
           authorId: ctx.user.id,
         });
+
         await logActivity(ctx.db, {
           userId: ctx.user.id,
-          action: "created",
+          action: "idea_created",
           entityType: "idea",
-          entityId: result.id,
-          details: `Enviou a ideia "${input.title}"`,
+          entityId: idea.id,
+          details: `Nova ideia: ${input.title}`,
         });
-        return result;
+
+        return idea;
       }),
 
     updateStatus: adminProcedure
       .input(z.object({
         id: z.number(),
         status: z.enum(["new", "rejected", "analysis", "approved"]),
-        rejectionReason: z.string().optional(),
         pointsAwarded: z.number().optional(),
+        rejectionReason: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const idea = await getIdeaById(ctx.db, input.id);
         if (!idea) throw new Error("Ideia não encontrada");
 
-        const updateData: Record<string, unknown> = {
+        const updated = await updateIdeaStatus(ctx.db, input.id, {
           status: input.status,
-          approvedById: ctx.user.id,
-        };
+          approvedById: input.status === "approved" ? ctx.user.id : undefined,
+          pointsAwarded: input.pointsAwarded,
+          rejectionReason: input.rejectionReason,
+        });
+
+        // Se aprovada e tem pontos, adicionar ao autor
+        if (input.status === "approved" && input.pointsAwarded && input.pointsAwarded > 0) {
+          // Adicionar pontos no ranking do colaborador
+          await addPoints(ctx.db, idea.authorId, input.pointsAwarded, `Ideia aprovada: "${idea.title}"`);
+
+          // Também registrar no highlight (destaque)
+          await addHighlightPoints(ctx.db, {
+            userId: idea.authorId,
+            points: input.pointsAwarded,
+            reason: `Ideia aprovada: ${idea.title}`,
+            awardedById: ctx.user.id,
+          });
+
+          await createNotification(ctx.db, {
+            userId: idea.authorId,
+            type: "idea_approved",
+            title: "Sua ideia foi aprovada!",
+            message: `Sua ideia "${idea.title}" foi aprovada e você ganhou ${input.pointsAwarded} pontos!`,
+            entityType: "idea",
+            entityId: idea.id,
+          });
+        }
 
         if (input.status === "rejected") {
-          updateData.rejectionReason = input.rejectionReason ?? null;
-          updateData.pointsAwarded = 0;
+          await createNotification(ctx.db, {
+            userId: idea.authorId,
+            type: "idea_rejected",
+            title: "Sua ideia foi rejeitada",
+            message: `Sua ideia "${idea.title}" foi rejeitada.${input.rejectionReason ? ` Motivo: ${input.rejectionReason}` : ""}`,
+            entityType: "idea",
+            entityId: idea.id,
+          });
         }
 
-        if (input.status === "approved") {
-          const points = input.pointsAwarded ?? 15;
-          updateData.pointsAwarded = points;
-          await addPoints(ctx.db, idea.authorId, points, `Ideia aprovada: "${idea.title}"`, null);
-          await checkAndAwardBadges(ctx.db, idea.authorId);
+        if (input.status === "analysis") {
+          await createNotification(ctx.db, {
+            userId: idea.authorId,
+            type: "idea_analysis",
+            title: "Sua ideia está em análise",
+            message: `Sua ideia "${idea.title}" está sendo analisada.`,
+            entityType: "idea",
+            entityId: idea.id,
+          });
         }
-
-        await updateIdea(ctx.db, input.id, updateData as any);
-
-        const statusLabels: Record<string, string> = {
-          new: "Nova",
-          rejected: "Rejeitada",
-          analysis: "Em Análise",
-          approved: "Aprovada",
-        };
 
         await logActivity(ctx.db, {
           userId: ctx.user.id,
-          action: "status_changed",
+          action: `idea_${input.status}`,
           entityType: "idea",
           entityId: input.id,
-          details: `Alterou status da ideia para "${statusLabels[input.status]}"`,
+          details: `Ideia "${idea.title}" movida para ${input.status}`,
         });
 
-        return { success: true };
+        return updated;
       }),
 
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await deleteIdea(ctx.db, input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ===== COLABORADOR DESTAQUE =====
+  highlight: router({
+    addPoints: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        points: z.number().min(1),
+        reason: z.string().min(1).max(500),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await addHighlightPoints(ctx.db, {
+          userId: input.userId,
+          points: input.points,
+          reason: input.reason,
+          awardedById: ctx.user.id,
+        });
+
+        const targetUser = await getUserById(ctx.db, input.userId);
+
+        await createNotification(ctx.db, {
+          userId: input.userId,
+          type: "highlight_points",
+          title: "Você recebeu pontos de destaque!",
+          message: `Você recebeu ${input.points} pontos. Motivo: ${input.reason}`,
+          entityType: "highlight",
+          entityId: result.id,
+        });
+
         await logActivity(ctx.db, {
           userId: ctx.user.id,
-          action: "deleted",
-          entityType: "idea",
-          entityId: input.id,
-          details: `Excluiu a ideia #${input.id}`,
+          action: "highlight_points",
+          entityType: "highlight",
+          entityId: result.id,
+          details: `${input.points} pts para ${targetUser?.name || "Colaborador"}: ${input.reason}`,
         });
-        return { success: true };
+
+        return result;
+      }),
+
+    log: protectedProcedure
+      .input(z.object({ limit: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        return getHighlightPointsLog(ctx.db, input?.limit || 100);
+      }),
+
+    byUser: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getHighlightPointsByUser(ctx.db, input.userId);
       }),
   }),
 });

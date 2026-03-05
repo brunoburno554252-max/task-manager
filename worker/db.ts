@@ -5,7 +5,7 @@ import {
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
   checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
-  ideas, Idea, InsertIdea,
+  notifications, pointsAudit, ideas, highlightPoints,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -160,7 +160,12 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
   offset?: number;
 }) {
   const conditions = [];
-  if (filters?.status && filters.status !== "all") {
+  if (filters?.status === "overdue") {
+    // Special filter for overdue tasks
+    conditions.push(sql`${tasks.status} NOT IN ('completed', 'review')`);
+    conditions.push(sql`${tasks.dueDate} IS NOT NULL`);
+    conditions.push(sql`${tasks.dueDate} < ${Date.now()}`);
+  } else if (filters?.status && filters.status !== "all") {
     conditions.push(eq(tasks.status, filters.status as Task["status"]));
   }
   if (filters?.priority && filters.priority !== "all") {
@@ -190,10 +195,34 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [taskList, countResult] = await Promise.all([
-    db.select().from(tasks)
+    db.select({
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      assigneeId: tasks.assigneeId,
+      companyId: tasks.companyId,
+      dueDate: tasks.dueDate,
+      startTime: tasks.startTime,
+      endTime: tasks.endTime,
+      pointsAwarded: tasks.pointsAwarded,
+      sortOrder: tasks.sortOrder,
+      completedAt: tasks.completedAt,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      assigneeName: sql<string>`(SELECT name FROM users WHERE users.id = tasks.assigneeId)`,
+      assigneeAvatarUrl: sql<string>`(SELECT avatarUrl FROM users WHERE users.id = tasks.assigneeId)`,
+      companyName: sql<string>`(SELECT name FROM companies WHERE companies.id = tasks.companyId)`,
+    }).from(tasks)
       .where(where)
-      .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
-      .limit(filters?.limit ?? 50)
+      .orderBy(
+        sql`CASE ${tasks.priority} WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC`,
+        sql`CASE WHEN ${tasks.dueDate} IS NULL THEN 1 ELSE 0 END ASC`,
+        asc(tasks.dueDate),
+        desc(tasks.createdAt)
+      )
+      .limit(filters?.limit ?? 200)
       .offset(filters?.offset ?? 0),
     db.select({ count: sql<number>`count(*)` }).from(tasks).where(where),
   ]);
@@ -204,7 +233,7 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
 export async function updateTask(db: DrizzleD1Database, id: number, data: Partial<{
   title: string;
   description: string;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "review" | "completed";
   priority: "low" | "medium" | "high" | "urgent";
   assigneeId: number | null;
   dueDate: number | null;
@@ -272,6 +301,25 @@ export async function getUserPoints(db: DrizzleD1Database, userId: number) {
     .where(eq(pointsLog.userId, userId))
     .orderBy(desc(pointsLog.createdAt))
     .limit(50);
+}
+
+export async function revertPointsByTaskId(db: DrizzleD1Database, taskId: number) {
+  // Find all points_log entries for this task
+  const entries = await db.select().from(pointsLog)
+    .where(eq(pointsLog.taskId, taskId));
+  
+  // Subtract points from each user's totalPoints
+  for (const entry of entries) {
+    await db.update(users).set({
+      totalPoints: sql`MAX(0, ${users.totalPoints} - ${entry.points})`,
+      updatedAt: new Date().toISOString(),
+    }).where(eq(users.id, entry.userId));
+  }
+  
+  // Delete the points_log entries for this task
+  await db.delete(pointsLog).where(eq(pointsLog.taskId, taskId));
+  
+  return entries;
 }
 
 // ============ RANKING ============
@@ -470,11 +518,14 @@ export async function getDashboardStats(db: DrizzleD1Database, userId?: number) 
   const [completedResult] = await db.select({ count: sql<number>`count(*)` })
     .from(tasks).where(baseCondition ? and(baseCondition, eq(tasks.status, "completed")) : eq(tasks.status, "completed"));
 
+  const [reviewResult] = await db.select({ count: sql<number>`count(*)` })
+    .from(tasks).where(baseCondition ? and(baseCondition, eq(tasks.status, "review" as any)) : eq(tasks.status, "review" as any));
+
   const [overdueResult] = await db.select({ count: sql<number>`count(*)` })
     .from(tasks).where(
       baseCondition
-        ? and(baseCondition, sql`${tasks.status} != 'completed'`, sql`${tasks.dueDate} IS NOT NULL`, sql`${tasks.dueDate} < ${now}`)
-        : and(sql`${tasks.status} != 'completed'`, sql`${tasks.dueDate} IS NOT NULL`, sql`${tasks.dueDate} < ${now}`)
+        ? and(baseCondition, sql`${tasks.status} NOT IN ('completed', 'review')`, sql`${tasks.dueDate} IS NOT NULL`, sql`${tasks.dueDate} < ${now}`)
+        : and(sql`${tasks.status} NOT IN ('completed', 'review')`, sql`${tasks.dueDate} IS NOT NULL`, sql`${tasks.dueDate} < ${now}`)
     );
 
   const total = totalResult?.count ?? 0;
@@ -485,6 +536,7 @@ export async function getDashboardStats(db: DrizzleD1Database, userId?: number) 
     total,
     pending: pendingResult?.count ?? 0,
     inProgress: inProgressResult?.count ?? 0,
+    review: reviewResult?.count ?? 0,
     completed,
     overdue: overdueResult?.count ?? 0,
     completionRate,
@@ -521,6 +573,8 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
     totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id)`,
+    reviewTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'review')`,
+    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -541,6 +595,7 @@ export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, 
     inProgressTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
     totalTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId})`,
+    overdueTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status != 'completed' AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -732,6 +787,8 @@ export async function getCompaniesWithStats(db: DrizzleD1Database) {
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'completed')`,
+    reviewTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'review')`,
+    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
     collaboratorCount: sql<number>`(SELECT COUNT(*) FROM company_members WHERE company_members.companyId = companies.id)`,
   }).from(companies).orderBy(asc(companies.name));
   return result;
@@ -779,6 +836,79 @@ export async function getCompanyMemberIds(db: DrizzleD1Database, companyId: numb
   return members.map(m => m.userId);
 }
 
+// ============ NOTIFICATIONS ============
+
+export async function createNotification(db: DrizzleD1Database, data: {
+  userId: number;
+  type: string;
+  title: string;
+  message: string;
+  entityType?: string;
+  entityId?: number;
+}) {
+  const result = await db.insert(notifications).values({
+    userId: data.userId,
+    type: data.type,
+    title: data.title,
+    message: data.message,
+    entityType: data.entityType ?? null,
+    entityId: data.entityId ?? null,
+  }).returning({ id: notifications.id });
+  return { id: result[0].id };
+}
+
+export async function getNotifications(db: DrizzleD1Database, userId: number, limit: number = 50) {
+  const notifs = await db.select().from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+
+  // For task notifications, fetch the assigneeId so frontend can navigate to the right Kanban
+  const enriched = await Promise.all(notifs.map(async (n) => {
+    if (n.entityType === "task" && n.entityId) {
+      const [task] = await db.select({ assigneeId: tasks.assigneeId }).from(tasks).where(eq(tasks.id, n.entityId)).limit(1);
+      return { ...n, taskAssigneeId: task?.assigneeId ?? null };
+    }
+    return { ...n, taskAssigneeId: null };
+  }));
+
+  return enriched;
+}
+
+export async function getUnreadNotificationCount(db: DrizzleD1Database, userId: number) {
+  const [result] = await db.select({ count: sql<number>`count(*)` })
+    .from(notifications)
+    .where(and(eq(notifications.userId, userId), eq(notifications.isRead, 0)));
+  return result?.count ?? 0;
+}
+
+export async function getManualPointsLog(db: DrizzleD1Database, limit: number = 100) {
+  // Get all manual points (taskId is null) with user info
+  const logs = await db.select({
+    id: pointsLog.id,
+    userId: pointsLog.userId,
+    points: pointsLog.points,
+    reason: pointsLog.reason,
+    createdAt: pointsLog.createdAt,
+    userName: users.name,
+    userAvatarUrl: users.avatarUrl,
+  })
+    .from(pointsLog)
+    .leftJoin(users, eq(pointsLog.userId, users.id))
+    .where(sql`${pointsLog.taskId} IS NULL`)
+    .orderBy(desc(pointsLog.createdAt))
+    .limit(limit);
+  return logs;
+}
+
+export async function markNotificationRead(db: DrizzleD1Database, id: number) {
+  await db.update(notifications).set({ isRead: 1 }).where(eq(notifications.id, id));
+}
+
+export async function markAllNotificationsRead(db: DrizzleD1Database, userId: number) {
+  await db.update(notifications).set({ isRead: 1 }).where(eq(notifications.userId, userId));
+}
+
 // Atualizar getCollaboratorsWithStatsByCompany para mostrar apenas membros vinculados
 export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, companyId: number) {
   const result = await db.select({
@@ -801,24 +931,45 @@ export async function getCompanyCollaboratorsWithStats(db: DrizzleD1Database, co
   return result;
 }
 
-// ============ IDEAS (CAIXA DE IDEIAS) ============
-
-export async function createIdea(db: DrizzleD1Database, data: { title: string; description?: string; authorId: number }) {
-  const now = new Date().toISOString();
-  const result = await db.insert(ideas).values({
-    title: data.title,
-    description: data.description ?? null,
-    status: "new",
-    authorId: data.authorId,
-    pointsAwarded: 0,
-    createdAt: now,
-    updatedAt: now,
-  }).returning({ id: ideas.id });
-  return { id: result[0].id };
+// ===== POINTS AUDIT SYSTEM =====
+export async function logPointsAudit(db: DrizzleD1Database, data: {
+  taskId: number;
+  taskTitle: string;
+  oldPoints: number;
+  newPoints: number;
+  changedBy: number;
+  changedByName: string | null;
+  action: string;
+  reason: string;
+  statusBefore?: string | null;
+  statusAfter?: string | null;
+}) {
+  await db.insert(pointsAudit).values({
+    taskId: data.taskId,
+    taskTitle: data.taskTitle,
+    oldPoints: data.oldPoints,
+    newPoints: data.newPoints,
+    changedBy: data.changedBy,
+    changedByName: data.changedByName,
+    action: data.action,
+    reason: data.reason,
+    statusBefore: data.statusBefore || null,
+    statusAfter: data.statusAfter || null,
+    createdAt: new Date().toISOString(),
+  });
 }
 
+export async function getPointsAuditLog(db: DrizzleD1Database, limit: number = 200) {
+  return db.select().from(pointsAudit).orderBy(desc(pointsAudit.createdAt)).limit(limit);
+}
+
+export async function getPointsAuditByTask(db: DrizzleD1Database, taskId: number) {
+  return db.select().from(pointsAudit).where(eq(pointsAudit.taskId, taskId)).orderBy(desc(pointsAudit.createdAt));
+}
+
+// ===== CAIXA DE IDEIAS =====
 export async function listIdeas(db: DrizzleD1Database) {
-  return db.select({
+  const result = await db.select({
     id: ideas.id,
     title: ideas.title,
     description: ideas.description,
@@ -830,10 +981,12 @@ export async function listIdeas(db: DrizzleD1Database) {
     createdAt: ideas.createdAt,
     updatedAt: ideas.updatedAt,
     authorName: users.name,
+    authorEmail: users.email,
     authorAvatarUrl: users.avatarUrl,
   }).from(ideas)
     .leftJoin(users, eq(ideas.authorId, users.id))
     .orderBy(desc(ideas.createdAt));
+  return result;
 }
 
 export async function getIdeaById(db: DrizzleD1Database, id: number) {
@@ -849,28 +1002,99 @@ export async function getIdeaById(db: DrizzleD1Database, id: number) {
     createdAt: ideas.createdAt,
     updatedAt: ideas.updatedAt,
     authorName: users.name,
+    authorEmail: users.email,
     authorAvatarUrl: users.avatarUrl,
   }).from(ideas)
     .leftJoin(users, eq(ideas.authorId, users.id))
     .where(eq(ideas.id, id))
     .limit(1);
-  return result[0] ?? null;
+  return result[0] || null;
 }
 
-export async function updateIdea(db: DrizzleD1Database, id: number, data: Partial<{
-  title: string;
-  description: string | null;
+export async function createIdea(db: DrizzleD1Database, data: { title: string; description?: string; authorId: number }) {
+  const now = new Date().toISOString();
+  const result = await db.insert(ideas).values({
+    title: data.title,
+    description: data.description || null,
+    authorId: data.authorId,
+    status: "new",
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+  return result[0];
+}
+
+export async function updateIdeaStatus(db: DrizzleD1Database, id: number, data: {
   status: string;
-  pointsAwarded: number;
-  approvedById: number | null;
-  rejectionReason: string | null;
-}>) {
-  await db.update(ideas).set({
-    ...data,
-    updatedAt: new Date().toISOString(),
-  } as any).where(eq(ideas.id, id));
+  approvedById?: number;
+  pointsAwarded?: number;
+  rejectionReason?: string;
+}) {
+  const now = new Date().toISOString();
+  const updateData: any = {
+    status: data.status,
+    updatedAt: now,
+  };
+  if (data.approvedById !== undefined) updateData.approvedById = data.approvedById;
+  if (data.pointsAwarded !== undefined) updateData.pointsAwarded = data.pointsAwarded;
+  if (data.rejectionReason !== undefined) updateData.rejectionReason = data.rejectionReason;
+
+  await db.update(ideas).set(updateData).where(eq(ideas.id, id));
+  return getIdeaById(db, id);
 }
 
 export async function deleteIdea(db: DrizzleD1Database, id: number) {
   await db.delete(ideas).where(eq(ideas.id, id));
+}
+
+// ===== COLABORADOR DESTAQUE =====
+export async function addHighlightPoints(db: DrizzleD1Database, data: {
+  userId: number;
+  points: number;
+  reason: string;
+  awardedById: number;
+}) {
+  const now = new Date().toISOString();
+  const result = await db.insert(highlightPoints).values({
+    userId: data.userId,
+    points: data.points,
+    reason: data.reason,
+    awardedById: data.awardedById,
+    createdAt: now,
+  }).returning();
+
+  // Highlight points are separate from ranking points (totalPoints)
+  // They are stored only in highlight_points table
+
+  return result[0];
+}
+
+export async function getHighlightPointsLog(db: DrizzleD1Database, limit: number = 100) {
+  const result = await db.select({
+    id: highlightPoints.id,
+    userId: highlightPoints.userId,
+    points: highlightPoints.points,
+    reason: highlightPoints.reason,
+    awardedById: highlightPoints.awardedById,
+    createdAt: highlightPoints.createdAt,
+    userName: users.name,
+    userEmail: users.email,
+    userAvatarUrl: users.avatarUrl,
+  }).from(highlightPoints)
+    .leftJoin(users, eq(highlightPoints.userId, users.id))
+    .orderBy(desc(highlightPoints.createdAt))
+    .limit(limit);
+  return result;
+}
+
+export async function getHighlightPointsByUser(db: DrizzleD1Database, userId: number) {
+  const result = await db.select({
+    id: highlightPoints.id,
+    points: highlightPoints.points,
+    reason: highlightPoints.reason,
+    createdAt: highlightPoints.createdAt,
+  }).from(highlightPoints)
+    .where(eq(highlightPoints.userId, userId))
+    .orderBy(desc(highlightPoints.createdAt));
+  return result;
 }

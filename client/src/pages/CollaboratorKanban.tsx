@@ -22,7 +22,7 @@ import {
   ArrowDown, Search, X, MessageSquare, History, Send,
   Columns3, LayoutGrid, List, Eye, ChevronRight,
   ListChecks, Square, CheckSquare, GripVertical, Paperclip, Upload, Download, FileText, FileImage, File,
-  ChevronLeft, Pencil, Users,
+  ChevronLeft, Pencil, Users, ZoomIn, ExternalLink, Loader2,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -41,7 +41,7 @@ import confetti from "canvas-confetti";
 import { RichTextEditor, RichTextViewer } from "@/components/RichTextEditor";
 
 // ==================== TYPES ====================
-type TaskStatus = "pending" | "in_progress" | "completed";
+type TaskStatus = "pending" | "in_progress" | "review" | "completed";
 type Priority = "low" | "medium" | "high" | "urgent";
 type ViewMode = "tabs" | "kanban" | "list" | "agenda";
 
@@ -68,6 +68,7 @@ type TaskItem = {
 const statusConfig: Record<TaskStatus, { label: string; icon: React.ElementType; color: string; bg: string; gradient: string; dotColor: string }> = {
   pending: { label: "Pendentes", icon: Circle, color: "text-orange-500", bg: "bg-orange-500/10", gradient: "from-orange-500 to-amber-500", dotColor: "bg-orange-500" },
   in_progress: { label: "Em Andamento", icon: Clock, color: "text-blue-500", bg: "bg-blue-500/10", gradient: "from-blue-500 to-cyan-500", dotColor: "bg-blue-500" },
+  review: { label: "Em Análise", icon: Eye, color: "text-purple-500", bg: "bg-purple-500/10", gradient: "from-purple-500 to-violet-500", dotColor: "bg-purple-500" },
   completed: { label: "Concluídas", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10", gradient: "from-emerald-500 to-green-500", dotColor: "bg-emerald-500" },
 };
 
@@ -78,7 +79,21 @@ const priorityConfig: Record<Priority, { label: string; icon: React.ElementType;
   urgent: { label: "Urgente", icon: Flame, color: "text-red-400", bg: "bg-red-400/10" },
 };
 
-const statusOrder: TaskStatus[] = ["pending", "in_progress", "completed"];
+const statusOrder: TaskStatus[] = ["pending", "in_progress", "review", "completed"];
+
+const priorityWeight: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+function sortByPriorityAndDueDate(a: TaskItem, b: TaskItem): number {
+  // First sort by priority (urgent first)
+  const pw = priorityWeight[a.priority] - priorityWeight[b.priority];
+  if (pw !== 0) return pw;
+  // Then by due date (earliest first, null last)
+  if (a.dueDate && b.dueDate) return a.dueDate - b.dueDate;
+  if (a.dueDate && !b.dueDate) return -1;
+  if (!a.dueDate && b.dueDate) return 1;
+  // Then by creation date (newest first)
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
 
 const viewModes: { key: ViewMode; label: string; icon: React.ElementType; desc: string }[] = [
   { key: "kanban", label: "Kanban", icon: Columns3, desc: "Colunas arrastáveis" },
@@ -105,8 +120,18 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
 
   const pCfg = priorityConfig[task.priority];
   const PIcon = pCfg.icon;
-  const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
-  const isDueSoon = task.dueDate && task.status !== "completed" && !isOverdue && (task.dueDate - Date.now()) < 86400000;
+  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
+  const isDueSoon = useMemo(() => {
+    if (!task.dueDate || task.status === "completed" || task.status === "review" || isOverdue) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+
+    return dueDate.getTime() === today.getTime();
+  }, [task.dueDate, task.status, isOverdue]);
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const wasDragged = useRef(false);
@@ -219,7 +244,7 @@ function SimpleTaskCard({ task, onClick, onStatusChange }: {
 }) {
   const sCfg = statusConfig[task.status];
   const pCfg = priorityConfig[task.priority];
-  const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
+  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
   const currentIndex = statusOrder.indexOf(task.status);
   const nextStatus = currentIndex < statusOrder.length - 1 ? statusOrder[currentIndex + 1] : null;
   const nextCfg = nextStatus ? statusConfig[nextStatus] : null;
@@ -336,6 +361,10 @@ export default function CollaboratorKanban() {
   // Comment state
   const [commentText, setCommentText] = useState("");
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Attachment preview state
+  const [previewAttachment, setPreviewAttachment] = useState<{id: number; fileName: string; fileType: string; fileData?: string} | null>(null);
+  const [loadingAttachmentId, setLoadingAttachmentId] = useState<number | null>(null);
 
   // Data
   const { data: collabUser } = trpc.users.getById.useQuery({ id: userId });
@@ -520,7 +549,7 @@ export default function CollaboratorKanban() {
   }, [tasks, search, priorityFilter, statusFilter, dateFrom, dateTo, companyId, companyFilter]);
 
   const tasksByStatus = useMemo(() => {
-    const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
+    const grouped: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], review: [], completed: [] };
     for (const task of filteredTasks) {
       const overriddenStatus = localStatusOverrides[task.id] ?? task.status;
       grouped[overriddenStatus]?.push(task);
@@ -539,16 +568,16 @@ export default function CollaboratorKanban() {
         }
         grouped[status] = ordered;
       } else {
-        grouped[status].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        grouped[status].sort(sortByPriorityAndDueDate);
       }
     }
     return grouped;
   }, [filteredTasks, localStatusOverrides, localOrderOverrides]);
 
   const rawTasksByStatus = useMemo(() => {
-    const map: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], completed: [] };
+    const map: Record<TaskStatus, TaskItem[]> = { pending: [], in_progress: [], review: [], completed: [] };
     filteredTasks.forEach(t => map[t.status]?.push(t));
-    Object.values(map).forEach(arr => arr.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+    Object.values(map).forEach(arr => arr.sort(sortByPriorityAndDueDate));
     return map;
   }, [filteredTasks]);
 
@@ -627,7 +656,7 @@ export default function CollaboratorKanban() {
 
   // ===== DND Handlers =====
   const findContainer = useCallback((id: string): TaskStatus | null => {
-    if (["pending", "in_progress", "completed"].includes(id)) return id as TaskStatus;
+    if (["pending", "in_progress", "review", "completed"].includes(id)) return id as TaskStatus;
     if (id.startsWith("task-")) {
       const tId = parseInt(id.replace("task-", ""));
       if (localStatusOverrides[tId]) return localStatusOverrides[tId];
@@ -715,7 +744,32 @@ export default function CollaboratorKanban() {
     }
 
     if (targetStatus && targetStatus !== task.status) {
-      statusMutation.mutate({ id: taskId, status: targetStatus });
+      let finalStatus = targetStatus;
+
+      // Non-admin restrictions
+      if (!isAdmin) {
+        // Cannot move from review to anywhere (only CEO can approve/reject)
+        if (task.status === "review") {
+          toast.error("Apenas o CEO pode aprovar ou devolver tarefas em análise");
+          setActiveId(null); setOverId(null);
+          setLocalStatusOverrides({}); setLocalOrderOverrides({});
+          return;
+        }
+        // Cannot move directly to completed - redirect to review
+        if (targetStatus === "completed") {
+          finalStatus = "review";
+          toast.info("Tarefa enviada para análise do CEO");
+        }
+        // Cannot move to review from pending (must be in_progress first)
+        if (targetStatus === "review" && task.status === "pending") {
+          toast.error("A tarefa precisa estar em andamento antes de enviar para análise");
+          setActiveId(null); setOverId(null);
+          setLocalStatusOverrides({}); setLocalOrderOverrides({});
+          return;
+        }
+      }
+
+      statusMutation.mutate({ id: taskId, status: finalStatus });
     }
 
     setActiveId(null); setOverId(null);
@@ -762,6 +816,38 @@ export default function CollaboratorKanban() {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
+
+  // Fetch attachment data and trigger download
+  const handleDownloadAttachment = useCallback(async (attId: number, fileName: string, fileType: string) => {
+    setLoadingAttachmentId(attId);
+    try {
+      const data = await utils.client.tasks.getAttachment.query({ id: attId });
+      if (!data?.fileData) { toast.error("Arquivo n\u00e3o encontrado"); return; }
+      const byteChars = atob(data.fileData);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArray], { type: fileType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Download iniciado!");
+    } catch { toast.error("Erro ao baixar arquivo"); }
+    finally { setLoadingAttachmentId(null); }
+  }, [utils]);
+
+  // Open attachment preview (images and PDFs)
+  const handlePreviewAttachment = useCallback(async (att: {id: number; fileName: string; fileType: string}) => {
+    setLoadingAttachmentId(att.id);
+    try {
+      const data = await utils.client.tasks.getAttachment.query({ id: att.id });
+      if (!data?.fileData) { toast.error("Arquivo n\u00e3o encontrado"); return; }
+      setPreviewAttachment({ id: att.id, fileName: att.fileName, fileType: att.fileType, fileData: data.fileData });
+    } catch { toast.error("Erro ao carregar preview"); }
+    finally { setLoadingAttachmentId(null); }
+  }, [utils]);
+
+  const isPreviewable = (fileType: string) => fileType.startsWith("image/") || fileType === "application/pdf";
 
   const activeTask = activeId ? tasks.find(t => t.id === parseInt(activeId.replace("task-", ""))) : null;
   const initials = (collabUser?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -825,9 +911,24 @@ export default function CollaboratorKanban() {
                   const Icon = cfg.icon;
                   const isCurrent = task.status === s;
                   const isPast = statusOrder.indexOf(task.status) > i;
+                  // Non-admin: hide 'completed' button (they must go through review)
+                  if (!isAdmin && s === "completed") return null;
+                  // Non-admin: cannot move from review (only CEO can)
+                  if (!isAdmin && task.status === "review" && s !== "review") return null;
+                  // Non-admin: cannot jump from pending to review
+                  if (!isAdmin && task.status === "pending" && s === "review") return null;
                   return (
                     <button key={s}
-                      onClick={() => statusMutation.mutate({ id: task.id, status: s })}
+                      disabled={isCurrent}
+                      onClick={() => {
+                        if (isCurrent) return;
+                        if (!isAdmin && s === "completed") {
+                          statusMutation.mutate({ id: task.id, status: "review" });
+                          toast.info("Tarefa enviada para an\u00e1lise do CEO");
+                        } else {
+                          statusMutation.mutate({ id: task.id, status: s });
+                        }
+                      }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         isCurrent ? `${cfg.bg} ${cfg.color} ring-1 ring-current/30` :
                         isPast ? "bg-muted/30 text-muted-foreground" :
@@ -837,6 +938,23 @@ export default function CollaboratorKanban() {
                     </button>
                   );
                 })}
+                {/* Admin: show approve/reject buttons when task is in review */}
+                {isAdmin && task.status === "review" && (
+                  <div className="flex items-center gap-1 ml-2 border-l border-border/30 pl-2">
+                    <button
+                      onClick={() => { statusMutation.mutate({ id: task.id, status: "completed" }); toast.success("Tarefa aprovada!"); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 transition-all"
+                    >
+                      <CheckCircle2 className="h-3 w-3" /> Aprovar
+                    </button>
+                    <button
+                      onClick={() => { statusMutation.mutate({ id: task.id, status: "in_progress" }); toast.info("Tarefa devolvida para ajustes"); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all"
+                    >
+                      <X className="h-3 w-3" /> Rejeitar
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -926,13 +1044,14 @@ export default function CollaboratorKanban() {
                       Pontos {isAdmin && <Pencil className="h-3 w-3 text-muted-foreground/50" />}
                     </p>
                     {isAdmin ? (
-                      <div className="flex items-center gap-1 text-primary">
+                      <div className="flex items-center gap-1 text-primary relative">
                         <Zap className="h-4 w-4" />
                         <input
                           type="number"
                           min="0"
+                          key={task.pointsAwarded}
                           defaultValue={task.pointsAwarded}
-                          onBlur={(e) => {
+                          onChange={(e) => {
                             const val = parseInt(e.target.value) || 0;
                             if (val !== task.pointsAwarded) {
                               updateMutation.mutate({ id: task.id, pointsAwarded: val });
@@ -941,6 +1060,9 @@ export default function CollaboratorKanban() {
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                           className="text-sm font-bold bg-transparent border-none outline-none w-16 text-primary"
                         />
+                        {updateMutation.isPending && (
+                          <span className="text-[9px] text-muted-foreground absolute -bottom-3 left-0">salvando...</span>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 text-primary">
@@ -1185,26 +1307,52 @@ export default function CollaboratorKanban() {
                   <div className="space-y-2">
                     {(attachments as any[])?.map((att: any) => {
                       const FIcon = getFileIcon(att.fileType);
+                      const isImage = att.fileType?.startsWith("image/");
+                      const isPdf = att.fileType === "application/pdf";
+                      const canPreview = isImage || isPdf;
+                      const isLoading = loadingAttachmentId === att.id;
                       return (
-                        <div key={att.id} className="flex items-center gap-3 rounded-lg bg-muted/10 p-2.5 group">
-                          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <FIcon className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{att.fileName}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {formatFileSize(att.fileSize)} • {new Date(att.createdAt).toLocaleDateString("pt-BR")}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                            onClick={() => {
-                              if (confirm("Remover este anexo?")) deleteAttachmentMutation.mutate({ id: att.id });
-                            }}
+                        <div key={att.id} className="rounded-xl bg-muted/10 border border-border/20 overflow-hidden group hover:border-primary/20 transition-all">
+                          {/* Clickable preview area */}
+                          <div
+                            className={`flex items-center gap-3 p-3 ${canPreview ? 'cursor-pointer hover:bg-muted/20' : ''} transition-colors`}
+                            onClick={() => canPreview && handlePreviewAttachment(att)}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${
+                              isImage ? 'bg-emerald-500/10' : isPdf ? 'bg-red-500/10' : 'bg-primary/10'
+                            }`}>
+                              {isLoading ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              ) : (
+                                <FIcon className={`h-4 w-4 ${
+                                  isImage ? 'text-emerald-500' : isPdf ? 'text-red-500' : 'text-primary'
+                                }`} />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{att.fileName}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {formatFileSize(att.fileSize)} \u2022 {att.uploaderName || 'Usu\u00e1rio'} \u2022 {new Date(att.createdAt).toLocaleDateString("pt-BR")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {canPreview && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Visualizar"
+                                  onClick={(e) => { e.stopPropagation(); handlePreviewAttachment(att); }}>
+                                  <ZoomIn className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Baixar"
+                                onClick={(e) => { e.stopPropagation(); handleDownloadAttachment(att.id, att.fileName, att.fileType); }}>
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive" title="Remover"
+                                onClick={(e) => { e.stopPropagation(); if (confirm("Remover este anexo?")) deleteAttachmentMutation.mutate({ id: att.id }); }}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -1492,7 +1640,7 @@ export default function CollaboratorKanban() {
                 const sCfg = statusConfig[task.status];
                 const pCfg = priorityConfig[task.priority];
                 const PIcon = pCfg.icon;
-                const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
+                const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
                 return (
                   <div key={task.id} onClick={() => setSelectedTask(task)}
                     className="sm:grid sm:grid-cols-[1fr_120px_100px_110px_80px] gap-2 px-4 py-3 items-center cursor-pointer hover:bg-muted/10 transition-colors group flex flex-col sm:flex-row"
@@ -1562,7 +1710,7 @@ export default function CollaboratorKanban() {
                 rawTasksByStatus[activeTab].map(task => {
                   const pCfg = priorityConfig[task.priority];
                   const PIcon = pCfg.icon;
-                  const isOverdue = task.dueDate && task.status !== "completed" && task.dueDate < Date.now();
+                  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
                   return (
                     <div key={task.id} onClick={() => setSelectedTask(task)}
                       className="group rounded-xl bg-card/80 border border-border/30 p-4 cursor-pointer hover:border-primary/30 hover:shadow-md transition-all duration-150 flex items-center gap-4">
@@ -1605,7 +1753,7 @@ export default function CollaboratorKanban() {
         <DndContext sensors={sensors} collisionDetection={closestCorners}
           onDragStart={handleDragStart} onDragOver={handleDragOver}
           onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {statusOrder.map(status => {
               const col = statusConfig[status];
               const colTasks = tasksByStatus[status];
@@ -1656,7 +1804,7 @@ export default function CollaboratorKanban() {
         const monthPending = monthTasks.filter(t => t.status === "pending").length;
         const monthInProgress = monthTasks.filter(t => t.status === "in_progress").length;
         const monthCompleted = monthTasks.filter(t => t.status === "completed").length;
-        const monthOverdue = monthTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime()).length;
+        const monthOverdue = monthTasks.filter(t => t.status !== "completed" && t.status !== "review" && t.dueDate && t.dueDate < now.getTime()).length;
         const noDueDateTasks = filteredTasks.filter(t => !t.dueDate);
         const upcomingTasks = filteredTasks.filter(t => {
           if (!t.dueDate || t.status === "completed") return false;
@@ -1744,7 +1892,7 @@ export default function CollaboratorKanban() {
               {calendarDays.map((day, idx) => {
                 const dateKey = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
                 const dayTasks = tasksByDate[dateKey] || [];
-                const hasOverdue = dayTasks.some(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime());
+                const hasOverdue = dayTasks.some(t => t.status !== "completed" && t.status !== "review" && t.dueDate && t.dueDate < now.getTime());
                 return (
                   <div key={idx} className={`min-h-[100px] p-1.5 border-b border-r border-border/10 transition-colors ${
                     !day.isCurrentMonth ? "bg-muted/5 opacity-40" : ""
@@ -1763,7 +1911,7 @@ export default function CollaboratorKanban() {
                     </div>
                     <div className="space-y-0.5">
                       {dayTasks.slice(0, 3).map(task => {
-                        const isOverdue = task.status !== "completed" && task.dueDate && task.dueDate < now.getTime();
+                        const isOverdue = task.status !== "completed" && task.status !== "review" && task.dueDate && task.dueDate < now.getTime();
                         return (
                           <div key={task.id} onClick={() => setSelectedTask(task)}
                             className={`px-1.5 py-0.5 rounded text-[10px] leading-tight cursor-pointer border transition-all hover:scale-[1.02] ${
@@ -1804,7 +1952,7 @@ export default function CollaboratorKanban() {
                   <div className="px-4 py-2.5 bg-muted/20 border-b border-border/30 flex items-center gap-2">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{item.dateLabel}</span>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{item.tasks.length}</Badge>
-                    {item.date !== "no-date" && item.tasks.some(t => t.status !== "completed" && t.dueDate && t.dueDate < now.getTime()) && (
+                    {item.date !== "no-date" && item.tasks.some(t => t.status !== "completed" && t.status !== "review" && t.dueDate && t.dueDate < now.getTime()) && (
                       <span className="text-[10px] text-red-400 font-medium ml-auto flex items-center gap-1">
                         <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> Atrasada
                       </span>
@@ -1815,7 +1963,7 @@ export default function CollaboratorKanban() {
                       const sc = statusConfig[task.status];
                       const pc = priorityConfig[task.priority];
                       const PIcon = pc.icon;
-                      const isOverdue = task.status !== "completed" && task.dueDate && task.dueDate < now.getTime();
+                      const isOverdue = task.status !== "completed" && task.status !== "review" && task.dueDate && task.dueDate < now.getTime();
                       return (
                         <div key={task.id} onClick={() => setSelectedTask(task)}
                           className={`flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer ${isOverdue ? "bg-red-500/5" : ""}`}>
@@ -1840,6 +1988,7 @@ export default function CollaboratorKanban() {
                               isOverdue ? "border-red-500/30 text-red-400" :
                               task.status === "pending" ? "border-orange-500/30 text-orange-400" :
                               task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
+                              task.status === "review" ? "border-purple-500/30 text-purple-400" :
                               "border-emerald-500/30 text-emerald-400"
                             }`}>
                               {sc.label}
@@ -1878,6 +2027,7 @@ export default function CollaboratorKanban() {
                         <Badge variant="outline" className={`text-[10px] shrink-0 ${
                           task.status === "pending" ? "border-orange-500/30 text-orange-400" :
                           task.status === "in_progress" ? "border-blue-500/30 text-blue-400" :
+                          task.status === "review" ? "border-purple-500/30 text-purple-400" :
                           "border-emerald-500/30 text-emerald-400"
                         }`}>
                           {sc.label}
@@ -2197,6 +2347,67 @@ export default function CollaboratorKanban() {
       </Dialog>
 
       {selectedTask && renderDetailPanel()}
+
+      {/* Attachment Preview Modal */}
+      <AnimatePresence>
+        {previewAttachment && previewAttachment.fileData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center"
+            onClick={() => setPreviewAttachment(null)}
+          >
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-[95vw] h-[90vh] max-w-6xl flex flex-col bg-card rounded-2xl border border-border/30 shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border/30 bg-card/95 backdrop-blur-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  {previewAttachment.fileType.startsWith("image/") ? (
+                    <FileImage className="h-5 w-5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <FileText className="h-5 w-5 text-red-500 shrink-0" />
+                  )}
+                  <span className="text-sm font-semibold truncate">{previewAttachment.fileName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs"
+                    onClick={() => handleDownloadAttachment(previewAttachment.id, previewAttachment.fileName, previewAttachment.fileType)}>
+                    <Download className="h-3.5 w-3.5" /> Baixar
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPreviewAttachment(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              {/* Content */}
+              <div className="flex-1 overflow-auto flex items-center justify-center bg-black/20 p-4">
+                {previewAttachment.fileType.startsWith("image/") && (
+                  <img
+                    src={`data:${previewAttachment.fileType};base64,${previewAttachment.fileData}`}
+                    alt={previewAttachment.fileName}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  />
+                )}
+                {previewAttachment.fileType === "application/pdf" && (
+                  <iframe
+                    src={`data:application/pdf;base64,${previewAttachment.fileData}`}
+                    className="w-full h-full rounded-lg border border-border/20"
+                    title={previewAttachment.fileName}
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
