@@ -338,9 +338,9 @@ export default function Collaborators() {
         </Dialog>
       )}
 
-      {/* Summary Stats */}
+      {/* Summary Stats - Clicáveis para Central de Tarefas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-amber-500/40 hover:shadow-md transition-all">
           <div className="h-9 w-9 rounded-lg bg-amber-500/15 flex items-center justify-center">
             <ListTodo className="h-4 w-4 text-amber-500" />
           </div>
@@ -349,7 +349,7 @@ export default function Collaborators() {
             <p className="text-xl font-bold">{totalStats.total}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=pending")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-orange-500/40 hover:shadow-md transition-all">
           <div className="h-9 w-9 rounded-lg bg-orange-500/15 flex items-center justify-center">
             <AlertCircle className="h-4 w-4 text-orange-500" />
           </div>
@@ -358,7 +358,7 @@ export default function Collaborators() {
             <p className="text-xl font-bold">{totalStats.pending}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=in_progress")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-blue-500/40 hover:shadow-md transition-all">
           <div className="h-9 w-9 rounded-lg bg-blue-500/15 flex items-center justify-center">
             <Clock className="h-4 w-4 text-blue-500" />
           </div>
@@ -367,7 +367,7 @@ export default function Collaborators() {
             <p className="text-xl font-bold">{totalStats.inProgress}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=completed")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-emerald-500/40 hover:shadow-md transition-all">
           <div className="h-9 w-9 rounded-lg bg-emerald-500/15 flex items-center justify-center">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>

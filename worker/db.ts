@@ -162,9 +162,12 @@ export async function listTasks(db: DrizzleD1Database, filters?: {
   const conditions = [];
   if (filters?.status === "overdue") {
     // Special filter for overdue tasks
+    // Usar início do dia atual para que tarefa com prazo "hoje" não apareça como atrasada
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     conditions.push(sql`${tasks.status} NOT IN ('completed', 'review')`);
     conditions.push(sql`${tasks.dueDate} IS NOT NULL`);
-    conditions.push(sql`${tasks.dueDate} < ${Date.now()}`);
+    conditions.push(sql`${tasks.dueDate} < ${todayStart.getTime()}`);
   } else if (filters?.status && filters.status !== "all") {
     conditions.push(eq(tasks.status, filters.status as Task["status"]));
   }
@@ -516,7 +519,11 @@ export async function getTaskActivities(db: DrizzleD1Database, taskId: number) {
 // ============ DASHBOARD STATS ============
 
 export async function getDashboardStats(db: DrizzleD1Database, userId?: number) {
-  const now = Date.now();
+  // Usar início do dia atual (00:00:00) para comparação de overdue
+  // Assim, tarefa com prazo "hoje" só fica atrasada amanhã
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const now = todayStart.getTime();
   const baseCondition = userId ? eq(tasks.assigneeId, userId) : undefined;
 
   const [totalResult] = await db.select({ count: sql<number>`count(*)` })
@@ -581,6 +588,7 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
     role: users.role,
     totalPoints: users.totalPoints,
     avatarUrl: users.avatarUrl,
+    isActive: users.isActive,
     createdAt: users.createdAt,
     lastSignedIn: users.lastSignedIn,
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'pending')`,
@@ -588,7 +596,7 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
     totalTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id)`,
     reviewTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'review')`,
-    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
+    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })()})`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -609,7 +617,7 @@ export async function getCollaboratorsWithStatsByCompany(db: DrizzleD1Database, 
     inProgressTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status = 'completed')`,
     totalTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId})`,
-    overdueTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status != 'completed' AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
+    overdueTasks: sql<number>`(SELECT COUNT(DISTINCT tasks.id) FROM tasks LEFT JOIN task_assignees ta ON ta.taskId = tasks.id WHERE (tasks.assigneeId = users.id OR ta.userId = users.id) AND tasks.companyId = ${companyId} AND tasks.status != 'completed' AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })()})`,
   }).from(users).orderBy(desc(users.totalPoints));
 
   return result;
@@ -802,7 +810,7 @@ export async function getCompaniesWithStats(db: DrizzleD1Database) {
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'completed')`,
     reviewTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status = 'review')`,
-    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${Date.now()})`,
+    overdueTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.companyId = companies.id AND tasks.status NOT IN ('completed', 'review') AND tasks.dueDate IS NOT NULL AND tasks.dueDate < ${(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })()})`,
     collaboratorCount: sql<number>`(SELECT COUNT(*) FROM company_members WHERE company_members.companyId = companies.id)`,
   }).from(companies).orderBy(asc(companies.name));
   return result;

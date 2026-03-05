@@ -131,30 +131,30 @@ export default function Companies() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Clicáveis para Central de Tarefas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-primary/40 hover:shadow-md transition-all">
           <ClipboardList className="h-5 w-5 text-primary" />
           <div>
             <p className="text-xs text-muted-foreground">Total Tarefas</p>
             <p className="text-xl font-bold">{totalStats.total}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=pending")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-orange-500/40 hover:shadow-md transition-all">
           <Clock className="h-5 w-5 text-orange-500" />
           <div>
             <p className="text-xs text-muted-foreground">Pendentes</p>
             <p className="text-xl font-bold">{totalStats.pending}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=in_progress")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-blue-500/40 hover:shadow-md transition-all">
           <Clock className="h-5 w-5 text-blue-500" />
           <div>
             <p className="text-xs text-muted-foreground">Em Andamento</p>
             <p className="text-xl font-bold">{totalStats.inProgress}</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3">
+        <div onClick={() => setLocation("/tasks?status=completed")} className="rounded-xl bg-card/80 border border-border/30 p-4 flex items-center gap-3 cursor-pointer hover:border-emerald-500/40 hover:shadow-md transition-all">
           <CheckCircle2 className="h-5 w-5 text-emerald-500" />
           <div>
             <p className="text-xs text-muted-foreground">Concluídas</p>

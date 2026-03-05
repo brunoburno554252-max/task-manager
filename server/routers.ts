@@ -80,6 +80,35 @@ export const appRouter = router({
         await updateUser(ctx.user.id, input as any);
         return { success: true };
       }),
+    toggleActive: adminProcedure
+      .input(z.object({ id: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.id === ctx.user.id) throw new Error("N\u00e3o pode inativar a si mesmo");
+        await updateUser(input.id, { isActive: input.isActive ? 1 : 0 } as any);
+        await logActivity({
+          userId: ctx.user.id,
+          action: input.isActive ? "reactivated" : "deactivated",
+          entityType: "user",
+          entityId: input.id,
+          details: `${input.isActive ? "Reativou" : "Inativou"} o colaborador #${input.id}`,
+        });
+        return { success: true };
+      }),
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.id === ctx.user.id) throw new Error("N\u00e3o pode excluir a si mesmo");
+        const { deleteUser } = await import("./db");
+        await deleteUser(input.id);
+        await logActivity({
+          userId: ctx.user.id,
+          action: "deleted",
+          entityType: "user",
+          entityId: input.id,
+          details: `Excluiu permanentemente o colaborador #${input.id}`,
+        });
+        return { success: true };
+      }),
   }),
 
   tasks: router({

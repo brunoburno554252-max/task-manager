@@ -41,6 +41,11 @@ auth.post("/login", async (c) => {
       return c.json({ error: "Email ou senha incorretos" }, 401);
     }
 
+    // Verificar se o usuário está ativo
+    if (user.isActive === 0) {
+      return c.json({ error: "Sua conta foi desativada. Entre em contato com o administrador." }, 403);
+    }
+
     // Update lastSignedIn
     const now = new Date().toISOString();
     await db.update(users).set({ lastSignedIn: now }).where(eq(users.id, user.id));

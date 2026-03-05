@@ -14,6 +14,7 @@ import {
 import {
   Users, UserPlus, Loader2, Pencil, Trash2, Phone, Mail, Shield,
   Clock, Activity, CalendarDays, Eye, LogIn, Monitor, TrendingUp, TrendingDown, Minus,
+  UserX, UserCheck, AlertTriangle, Search,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
@@ -58,6 +59,14 @@ export default function Cadastros() {
   // Access logs dialog
   const [accessLogUser, setAccessLogUser] = useState<{ id: number; name: string } | null>(null);
 
+  // Confirmation dialogs
+  const [deactivateUser, setDeactivateUser] = useState<{ id: number; name: string; isActive: boolean } | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: number; name: string } | null>(null);
+
+  // Search/filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
   const { data: collaborators, isLoading } = trpc.collaborators.listWithStats.useQuery();
   const { data: accessStats } = trpc.access.stats.useQuery({ daysBack: 30 });
   const { data: userAccessLogs } = trpc.access.list.useQuery(
@@ -86,6 +95,32 @@ export default function Cadastros() {
     onError: () => toast.error("Erro ao atualizar colaborador"),
   });
 
+  const toggleActiveMutation = trpc.users.toggleActive.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success(variables.isActive ? "Colaborador reativado!" : "Colaborador inativado!");
+      setDeactivateUser(null);
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erro ao alterar status");
+      setDeactivateUser(null);
+    },
+  });
+
+  const deleteUserMutation = trpc.users.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Colaborador excluído permanentemente!");
+      setDeleteUserTarget(null);
+      utils.collaborators.listWithStats.invalidate();
+      utils.users.list.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Erro ao excluir colaborador");
+      setDeleteUserTarget(null);
+    },
+  });
+
   // Merge access stats with collaborators
   const accessStatsMap = useMemo(() => {
     const map = new Map<number, { lastAccess: string; totalAccesses: number; uniqueDays: number; loginCount: number }>();
@@ -101,6 +136,27 @@ export default function Cadastros() {
     }
     return map;
   }, [accessStats]);
+
+  // Filtered collaborators
+  const filteredCollaborators = useMemo(() => {
+    if (!collaborators) return [];
+    let result = collaborators;
+    // Filter by status
+    if (statusFilter === "active") {
+      result = result.filter(c => (c as any).isActive !== 0);
+    } else if (statusFilter === "inactive") {
+      result = result.filter(c => (c as any).isActive === 0);
+    }
+    // Filter by search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(c =>
+        (c.name?.toLowerCase().includes(q)) ||
+        (c.email?.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [collaborators, statusFilter, searchQuery]);
 
   const handleEdit = (collab: any) => {
     setEditForm({
@@ -144,6 +200,9 @@ export default function Cadastros() {
     );
   }
 
+  const activeCount = collaborators?.filter(c => (c as any).isActive !== 0).length ?? 0;
+  const inactiveCount = collaborators?.filter(c => (c as any).isActive === 0).length ?? 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -164,6 +223,39 @@ export default function Cadastros() {
         </Button>
       </div>
 
+      {/* Search + Filter */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou email..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9 bg-card/80 border-border/30"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${statusFilter === "all" ? "bg-primary text-primary-foreground" : "bg-card/80 border border-border/30 text-muted-foreground hover:bg-muted/30"}`}
+          >
+            Todos ({collaborators?.length ?? 0})
+          </button>
+          <button
+            onClick={() => setStatusFilter("active")}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${statusFilter === "active" ? "bg-emerald-500 text-white" : "bg-card/80 border border-border/30 text-muted-foreground hover:bg-muted/30"}`}
+          >
+            Ativos ({activeCount})
+          </button>
+          <button
+            onClick={() => setStatusFilter("inactive")}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${statusFilter === "inactive" ? "bg-red-500 text-white" : "bg-card/80 border border-border/30 text-muted-foreground hover:bg-muted/30"}`}
+          >
+            Inativos ({inactiveCount})
+          </button>
+        </div>
+      </div>
+
       {/* User List with Access Info */}
       <div className="rounded-xl bg-card/80 border border-border/30 overflow-hidden">
         <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1fr_auto_auto] gap-4 px-5 py-3 border-b border-border/30 bg-muted/30">
@@ -173,27 +265,29 @@ export default function Cadastros() {
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ações</span>
         </div>
 
-        {collaborators && collaborators.length > 0 ? (
-          collaborators.map((collab) => {
+        {filteredCollaborators.length > 0 ? (
+          filteredCollaborators.map((collab) => {
             const initials = (collab.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
             const stats = accessStatsMap.get(collab.id);
             const lastAccess = stats?.lastAccess || (collab as any).lastSignedIn;
             const uniqueDays = stats?.uniqueDays ?? 0;
             const engagement = engagementLevel(uniqueDays, 30);
             const EngIcon = engagement.icon;
+            const isInactive = (collab as any).isActive === 0;
+            const isSelf = collab.id === user?.id;
 
             return (
               <div
                 key={collab.id}
-                className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1fr_auto_auto] gap-4 px-5 py-3 border-b border-border/10 hover:bg-muted/20 transition-colors items-center"
+                className={`grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1fr_auto_auto] gap-4 px-5 py-3 border-b border-border/10 hover:bg-muted/20 transition-colors items-center ${isInactive ? "opacity-50" : ""}`}
               >
                 {/* Name + email */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <Avatar className="h-9 w-9 shrink-0 border border-primary/20">
+                  <Avatar className={`h-9 w-9 shrink-0 border ${isInactive ? "border-red-500/30 grayscale" : "border-primary/20"}`}>
                     {(collab as any).avatarUrl ? (
                       <AvatarImage src={(collab as any).avatarUrl} alt={collab.name || ""} className="object-cover" />
                     ) : null}
-                    <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">
+                    <AvatarFallback className={`text-xs font-bold ${isInactive ? "bg-red-500/10 text-red-500" : "bg-primary/15 text-primary"}`}>
                       {initials}
                     </AvatarFallback>
                   </Avatar>
@@ -203,6 +297,11 @@ export default function Cadastros() {
                       {collab.role === "admin" && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 shrink-0">
                           Admin
+                        </Badge>
+                      )}
+                      {isInactive && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-red-500/20 text-red-500 border-0 shrink-0">
+                          Inativo
                         </Badge>
                       )}
                     </div>
@@ -252,6 +351,30 @@ export default function Cadastros() {
                   >
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
+                  {!isSelf && (
+                    <>
+                      <button
+                        onClick={() => setDeactivateUser({ id: collab.id, name: collab.name || "Colaborador", isActive: !isInactive })}
+                        className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
+                          isInactive ? "hover:bg-emerald-500/20" : "hover:bg-amber-500/20"
+                        }`}
+                        title={isInactive ? "Reativar colaborador" : "Inativar colaborador"}
+                      >
+                        {isInactive ? (
+                          <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <UserX className="h-3.5 w-3.5 text-amber-500" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setDeleteUserTarget({ id: collab.id, name: collab.name || "Colaborador" })}
+                        className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-red-500/20 transition-colors"
+                        title="Excluir permanentemente"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -259,17 +382,126 @@ export default function Cadastros() {
         ) : (
           <div className="text-center py-12">
             <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhum colaborador cadastrado</p>
-            <Button onClick={() => setShowRegister(true)} variant="outline" className="mt-4 gap-2">
-              <UserPlus className="h-4 w-4" /> Cadastrar primeiro colaborador
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              {searchQuery || statusFilter !== "all" ? "Nenhum colaborador encontrado com esses filtros" : "Nenhum colaborador cadastrado"}
+            </p>
+            {!searchQuery && statusFilter === "all" && (
+              <Button onClick={() => setShowRegister(true)} variant="outline" className="mt-4 gap-2">
+                <UserPlus className="h-4 w-4" /> Cadastrar primeiro colaborador
+              </Button>
+            )}
           </div>
         )}
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        {collaborators?.length ?? 0} colaborador{(collaborators?.length ?? 0) !== 1 ? "es" : ""} cadastrado{(collaborators?.length ?? 0) !== 1 ? "s" : ""}
+        {filteredCollaborators.length} de {collaborators?.length ?? 0} colaborador{(collaborators?.length ?? 0) !== 1 ? "es" : ""}
       </p>
+
+      {/* Deactivate/Reactivate Confirmation Dialog */}
+      <Dialog open={!!deactivateUser} onOpenChange={(open) => { if (!open) setDeactivateUser(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {deactivateUser?.isActive ? (
+                <>
+                  <div className="h-10 w-10 rounded-full bg-amber-500/15 flex items-center justify-center">
+                    <UserX className="h-5 w-5 text-amber-500" />
+                  </div>
+                  Inativar Colaborador
+                </>
+              ) : (
+                <>
+                  <div className="h-10 w-10 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                    <UserCheck className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  Reativar Colaborador
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {deactivateUser?.isActive ? (
+                <>
+                  Tem certeza que deseja <strong>inativar</strong> o colaborador <strong>"{deactivateUser?.name}"</strong>?
+                  O colaborador não poderá mais acessar a plataforma, mas seus dados e tarefas serão mantidos.
+                </>
+              ) : (
+                <>
+                  Tem certeza que deseja <strong>reativar</strong> o colaborador <strong>"{deactivateUser?.name}"</strong>?
+                  O colaborador voltará a ter acesso à plataforma.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeactivateUser(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (deactivateUser) {
+                  toggleActiveMutation.mutate({ id: deactivateUser.id, isActive: !deactivateUser.isActive });
+                }
+              }}
+              disabled={toggleActiveMutation.isPending}
+              className={deactivateUser?.isActive ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-600 hover:bg-emerald-700"}
+            >
+              {toggleActiveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : deactivateUser?.isActive ? (
+                <UserX className="h-4 w-4 mr-2" />
+              ) : (
+                <UserCheck className="h-4 w-4 mr-2" />
+              )}
+              {deactivateUser?.isActive ? "Sim, Inativar" : "Sim, Reativar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteUserTarget} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-full bg-red-500/15 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              Excluir Colaborador Permanentemente
+            </DialogTitle>
+            <DialogDescription>
+              <span className="text-red-500 font-semibold">ATENÇÃO: Esta ação é irreversível!</span>
+              <br /><br />
+              Tem certeza que deseja <strong>excluir permanentemente</strong> o colaborador <strong>"{deleteUserTarget?.name}"</strong>?
+              <br /><br />
+              Todos os dados associados a este colaborador serão removidos, incluindo pontos, conquistas e histórico.
+              <br /><br />
+              <strong>Dica:</strong> Se você apenas quer impedir o acesso, considere <em>inativar</em> o colaborador em vez de excluir.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteUserTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (deleteUserTarget) {
+                  deleteUserMutation.mutate({ id: deleteUserTarget.id });
+                }
+              }}
+              disabled={deleteUserMutation.isPending}
+              variant="destructive"
+            >
+              {deleteUserMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Sim, Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Access Log Dialog */}
       <Dialog open={!!accessLogUser} onOpenChange={(open) => { if (!open) setAccessLogUser(null); }}>

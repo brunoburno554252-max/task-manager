@@ -81,7 +81,8 @@ export default function TaskCenter() {
   }, [stats]);
 
   const isOverdue = (task: any) => {
-    return task.dueDate && task.status !== "completed" && task.status !== "review" && Date.now() > task.dueDate;
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    return task.dueDate && task.status !== "completed" && task.status !== "review" && todayStart.getTime() > task.dueDate;
   };
 
   const formatDate = (timestamp: number | null) => {

@@ -121,7 +121,7 @@ function SortableTaskCard({ task, onClick }: { task: TaskItem; onClick: () => vo
 
   const pCfg = priorityConfig[task.priority];
   const PIcon = pCfg.icon;
-  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
+  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
   const isDueSoon = useMemo(() => {
     if (!task.dueDate || task.status === "completed" || task.status === "review" || isOverdue) return false;
 
@@ -245,7 +245,7 @@ function SimpleTaskCard({ task, onClick, onStatusChange }: {
 }) {
   const sCfg = statusConfig[task.status];
   const pCfg = priorityConfig[task.priority];
-  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
+  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
   const currentIndex = statusOrder.indexOf(task.status);
   const nextStatus = currentIndex < statusOrder.length - 1 ? statusOrder[currentIndex + 1] : null;
   const nextCfg = nextStatus ? statusConfig[nextStatus] : null;
@@ -1641,7 +1641,7 @@ export default function CollaboratorKanban() {
                 const sCfg = statusConfig[task.status];
                 const pCfg = priorityConfig[task.priority];
                 const PIcon = pCfg.icon;
-                const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
+                const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
                 return (
                   <div key={task.id} onClick={() => setSelectedTask(task)}
                     className="sm:grid sm:grid-cols-[1fr_120px_100px_110px_80px] gap-2 px-4 py-3 items-center cursor-pointer hover:bg-muted/10 transition-colors group flex flex-col sm:flex-row"
@@ -1711,7 +1711,7 @@ export default function CollaboratorKanban() {
                 rawTasksByStatus[activeTab].map(task => {
                   const pCfg = priorityConfig[task.priority];
                   const PIcon = pCfg.icon;
-                  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < Date.now();
+                  const isOverdue = task.dueDate && task.status !== "completed" && task.status !== "review" && task.dueDate < (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
                   return (
                     <div key={task.id} onClick={() => setSelectedTask(task)}
                       className="group rounded-xl bg-card/80 border border-border/30 p-4 cursor-pointer hover:border-primary/30 hover:shadow-md transition-all duration-150 flex items-center gap-4">

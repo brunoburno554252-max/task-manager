@@ -11,6 +11,7 @@ export const users = sqliteTable("users", {
   passwordHash: text("passwordHash"),
   totalPoints: integer("totalPoints").default(0).notNull(),
   avatarUrl: text("avatarUrl"),
+  isActive: integer("isActive").default(1).notNull(), // 1 = ativo, 0 = inativo
   createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
   lastSignedIn: text("lastSignedIn").notNull().$defaultFn(() => new Date().toISOString()),

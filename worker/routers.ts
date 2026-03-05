@@ -138,19 +138,33 @@ export const appRouter = router({
         });
         return { success: true, userId: result[0].id };
       }),
+    toggleActive: adminProcedure
+      .input(z.object({ id: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.id === ctx.user.id) throw new Error("Não pode inativar a si mesmo");
+        await ctx.db.update(users).set({ isActive: input.isActive ? 1 : 0, updatedAt: new Date().toISOString() }).where(eq(users.id, input.id));
+        const targetUser = await ctx.db.select().from(users).where(eq(users.id, input.id)).limit(1);
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: input.isActive ? "reactivated" : "deactivated",
+          entityType: "user",
+          entityId: input.id,
+          details: `${input.isActive ? "Reativou" : "Inativou"} o colaborador "${targetUser[0]?.name || '#' + input.id}"`,
+        });
+        return { success: true };
+      }),
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         if (input.id === ctx.user.id) throw new Error("Não pode excluir a si mesmo");
-        
-        
+        const targetUser = await ctx.db.select().from(users).where(eq(users.id, input.id)).limit(1);
         await ctx.db.delete(users).where(eq(users.id, input.id));
         await logActivity(ctx.db, {
           userId: ctx.user.id,
           action: "deleted",
           entityType: "user",
           entityId: input.id,
-          details: `Removeu o colaborador #${input.id}`,
+          details: `Excluiu permanentemente o colaborador "${targetUser[0]?.name || '#' + input.id}"`,
         });
         return { success: true };
       }),

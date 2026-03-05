@@ -101,10 +101,17 @@ export async function updateUser(id: number, data: Partial<{
   email: string | null;
   phone: string | null;
   role: "user" | "admin";
+  isActive: number;
 }>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set(data).where(eq(users.id, id));
+}
+
+export async function deleteUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(users).where(eq(users.id, id));
 }
 
 // ============ TASKS ============
