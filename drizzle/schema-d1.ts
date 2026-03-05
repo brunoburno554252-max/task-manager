@@ -253,3 +253,18 @@ export const highlightPoints = sqliteTable("highlight_points", {
 
 export type HighlightPoint = typeof highlightPoints.$inferSelect;
 export type InsertHighlightPoint = typeof highlightPoints.$inferInsert;
+
+// ===== LOGS DE ACESSO À PLATAFORMA =====
+export const accessLogs = sqliteTable("access_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  userName: text("userName"),
+  action: text("action").notNull(), // 'login' | 'page_view' | 'heartbeat'
+  ipAddress: text("ipAddress"),
+  userAgent: text("userAgent"),
+  page: text("page"), // qual página acessou
+  sessionStart: text("sessionStart"),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+export type AccessLog = typeof accessLogs.$inferSelect;
+export type InsertAccessLog = typeof accessLogs.$inferInsert;

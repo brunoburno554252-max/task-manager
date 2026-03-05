@@ -5,7 +5,7 @@ import {
   pointsLog, badges, userBadges, activityLog,
   Badge, taskComments, chatMessages,
   checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
-  notifications, pointsAudit, ideas, highlightPoints, taskLogs,
+  notifications, pointsAudit, ideas, highlightPoints, taskLogs, accessLogs,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -582,6 +582,7 @@ export async function getCollaboratorsWithStats(db: DrizzleD1Database) {
     totalPoints: users.totalPoints,
     avatarUrl: users.avatarUrl,
     createdAt: users.createdAt,
+    lastSignedIn: users.lastSignedIn,
     pendingTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'pending')`,
     inProgressTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'in_progress')`,
     completedTasks: sql<number>`(SELECT COUNT(*) FROM tasks WHERE tasks.assigneeId = users.id AND tasks.status = 'completed')`,
@@ -1190,4 +1191,65 @@ export async function getTaskLogsByCollaborator(db: DrizzleD1Database, userId: n
     )
     .orderBy(desc(taskLogs.createdAt))
     .limit(limit);
+}
+
+
+// ============ LOGS DE ACESSO À PLATAFORMA ============
+export async function logAccess(db: DrizzleD1Database, data: {
+  userId: number;
+  userName?: string | null;
+  action: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  page?: string | null;
+  sessionStart?: string | null;
+}) {
+  await db.insert(accessLogs).values({
+    userId: data.userId,
+    userName: data.userName || null,
+    action: data.action,
+    ipAddress: data.ipAddress || null,
+    userAgent: data.userAgent || null,
+    page: data.page || null,
+    sessionStart: data.sessionStart || null,
+  });
+}
+
+export async function getAccessLogs(db: DrizzleD1Database, filters?: {
+  userId?: number;
+  action?: string;
+  limit?: number;
+  daysBack?: number;
+}) {
+  const conditions: any[] = [];
+  if (filters?.userId) conditions.push(eq(accessLogs.userId, filters.userId));
+  if (filters?.action) conditions.push(eq(accessLogs.action, filters.action));
+  if (filters?.daysBack) {
+    const since = new Date(Date.now() - filters.daysBack * 24 * 60 * 60 * 1000).toISOString();
+    conditions.push(sql`${accessLogs.createdAt} >= ${since}`);
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(accessLogs)
+    .where(where)
+    .orderBy(desc(accessLogs.createdAt))
+    .limit(filters?.limit ?? 500);
+}
+
+export async function getAccessStats(db: DrizzleD1Database, daysBack: number = 30) {
+  const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+
+  // Para cada usuário, pegar último acesso e contagem de dias únicos
+  const result = await db.select({
+    userId: accessLogs.userId,
+    userName: accessLogs.userName,
+    lastAccess: sql<string>`MAX(${accessLogs.createdAt})`,
+    totalAccesses: sql<number>`COUNT(*)`,
+    uniqueDays: sql<number>`COUNT(DISTINCT DATE(${accessLogs.createdAt}))`,
+    loginCount: sql<number>`SUM(CASE WHEN ${accessLogs.action} = 'login' THEN 1 ELSE 0 END)`,
+  })
+    .from(accessLogs)
+    .where(sql`${accessLogs.createdAt} >= ${since}`)
+    .groupBy(accessLogs.userId);
+
+  return result;
 }

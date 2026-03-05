@@ -22,6 +22,7 @@ import {
   listIdeas, getIdeaById, createIdea, updateIdeaStatus, deleteIdea,
   addHighlightPoints, getHighlightPointsLog, getHighlightPointsByUser,
   createTaskLog, getTaskLogs, getTaskLogsByCollaborator,
+  logAccess, getAccessLogs, getAccessStats,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -1219,7 +1220,48 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return getHighlightPointsByUser(ctx.db, input.userId);
       }),
+   }),
+
+  // ===== LOGS DE ACESSO À PLATAFORMA =====
+  access: router({
+    // Registrar acesso (chamado pelo client ao carregar a página)
+    log: protectedProcedure
+      .input(z.object({
+        action: z.enum(["login", "page_view", "heartbeat"]),
+        page: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userAgent = ctx.req.headers.get("user-agent") || null;
+        const ip = ctx.req.headers.get("cf-connecting-ip") || ctx.req.headers.get("x-forwarded-for") || null;
+        await logAccess(ctx.db, {
+          userId: ctx.user!.id,
+          userName: ctx.user!.name,
+          action: input.action,
+          ipAddress: ip,
+          userAgent,
+          page: input.page || null,
+        });
+        return { success: true };
+      }),
+
+    // Listar logs de acesso (admin)
+    list: adminProcedure
+      .input(z.object({
+        userId: z.number().optional(),
+        action: z.string().optional(),
+        limit: z.number().optional(),
+        daysBack: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        return getAccessLogs(ctx.db, input);
+      }),
+
+    // Estatísticas de acesso por usuário (admin)
+    stats: adminProcedure
+      .input(z.object({ daysBack: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        return getAccessStats(ctx.db, input?.daysBack ?? 30);
+      }),
   }),
 });
-
 export type AppRouter = typeof appRouter;

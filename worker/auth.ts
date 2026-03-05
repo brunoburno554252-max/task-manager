@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { SignJWT } from "jose";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { users } from "../drizzle/schema-d1";
+import { users, accessLogs } from "../drizzle/schema-d1";
 import type { Env } from "./db";
 
 type HonoEnv = { Bindings: Env };
@@ -42,7 +42,17 @@ auth.post("/login", async (c) => {
     }
 
     // Update lastSignedIn
-    await db.update(users).set({ lastSignedIn: new Date().toISOString() }).where(eq(users.id, user.id));
+    const now = new Date().toISOString();
+    await db.update(users).set({ lastSignedIn: now }).where(eq(users.id, user.id));
+    // Registrar log de acesso
+    await db.insert(accessLogs).values({
+      userId: user.id,
+      userName: user.name,
+      action: "login",
+      ipAddress: c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || null,
+      userAgent: c.req.header("user-agent") || null,
+      page: "/login",
+    });
 
     // Create JWT
     const secret = new TextEncoder().encode(c.env.JWT_SECRET || "taskflow-secret-key-2024");

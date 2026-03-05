@@ -298,6 +298,20 @@ function DashboardLayoutContent({
     }
   }, [location]);
 
+  // Registrar acesso à plataforma (page_view a cada navegação, throttled)
+  const logAccessMutation = trpc.access.log.useMutation();
+  const lastLoggedPage = useRef<string>("");
+  const lastLoggedTime = useRef<number>(0);
+  useEffect(() => {
+    if (!user) return;
+    const now = Date.now();
+    // Throttle: só registra se mudou de página ou passou 5 minutos
+    if (location === lastLoggedPage.current && now - lastLoggedTime.current < 5 * 60 * 1000) return;
+    lastLoggedPage.current = location;
+    lastLoggedTime.current = now;
+    logAccessMutation.mutate({ action: "page_view", page: location });
+  }, [location, user]);
+
   useEffect(() => {
     if (isCollapsed) {
       setIsResizing(false);
