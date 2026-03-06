@@ -25,6 +25,9 @@ import {
   logAccess, getAccessLogs, getAccessStats,
   generateProtocol, createComplaint, listComplaints, getComplaintById, getComplaintByProtocol,
   updateComplaint, createComplaintResponse, getComplaintResponses, getComplaintStats, deleteComplaint,
+  generateTicketProtocol, createExternalTicket, listExternalTickets, getExternalTicketById,
+  updateExternalTicketStatus, updateExternalTicket, deleteExternalTicket,
+  addTicketNote, getTicketNotes, getExternalTicketStats,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -1684,6 +1687,144 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await deleteComplaint(ctx.db, input.id);
         return { success: true };
+      }),
+  }),
+
+  // ===== CHAMADOS EXTERNOS =====
+  externalTickets: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return listExternalTickets(ctx.db);
+    }),
+
+    stats: protectedProcedure.query(async ({ ctx }) => {
+      return getExternalTicketStats(ctx.db);
+    }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getExternalTicketById(ctx.db, input.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        channel: z.enum(['whatsapp', 'bitrix', 'telefone', 'email', 'instagram', 'presencial', 'outro']),
+        type: z.enum(['reclamacao', 'duvida', 'solicitacao', 'sugestao', 'informacao', 'outro']),
+        priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
+        contactName: z.string().min(1),
+        contactPhone: z.string().optional(),
+        contactEmail: z.string().optional(),
+        contactCompany: z.string().optional(),
+        subject: z.string().min(2),
+        description: z.string().min(3),
+        receivedAt: z.string().optional(),
+        dueDate: z.string().optional(),
+        assignedToId: z.number().optional(),
+        tags: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await generateTicketProtocol(ctx.db);
+        const assignedUser = input.assignedToId ? await getUserById(ctx.db, input.assignedToId) : null;
+        const ticket = await createExternalTicket(ctx.db, {
+          protocol,
+          channel: input.channel,
+          type: input.type,
+          priority: input.priority || 'media',
+          contactName: input.contactName,
+          contactPhone: input.contactPhone || null,
+          contactEmail: input.contactEmail || null,
+          contactCompany: input.contactCompany || null,
+          subject: input.subject,
+          description: input.description,
+          receivedAt: input.receivedAt || new Date().toISOString(),
+          dueDate: input.dueDate || null,
+          registeredById: ctx.user.id,
+          registeredByName: ctx.user.name || null,
+          assignedToId: input.assignedToId || null,
+          assignedToName: assignedUser?.name || null,
+          tags: input.tags || null,
+        });
+        // Notificar admins
+        const allUsers = await getAllUsers(ctx.db);
+        for (const admin of allUsers.filter(u => u.role === 'admin' && u.id !== ctx.user.id)) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: 'ticket_new',
+            title: 'Novo chamado externo registrado',
+            message: `${ctx.user.name} registrou chamado via ${input.channel}: "${input.subject}" [${protocol}]`,
+            entityType: 'ticket',
+            entityId: ticket.id,
+          });
+        }
+        return ticket;
+      }),
+
+    updateStatus: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(['aberto', 'em_andamento', 'aguardando', 'resolvido', 'cancelado']),
+        resolution: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateExternalTicketStatus(ctx.db, input.id, input.status, input.resolution);
+        return { success: true };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        channel: z.enum(['whatsapp', 'bitrix', 'telefone', 'email', 'instagram', 'presencial', 'outro']).optional(),
+        type: z.enum(['reclamacao', 'duvida', 'solicitacao', 'sugestao', 'informacao', 'outro']).optional(),
+        priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
+        contactName: z.string().optional(),
+        contactPhone: z.string().optional(),
+        contactEmail: z.string().optional(),
+        contactCompany: z.string().optional(),
+        subject: z.string().optional(),
+        description: z.string().optional(),
+        dueDate: z.string().nullable().optional(),
+        assignedToId: z.number().nullable().optional(),
+        tags: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        if (data.assignedToId) {
+          const assignedUser = await getUserById(ctx.db, data.assignedToId);
+          (data as any).assignedToName = assignedUser?.name || null;
+        }
+        await updateExternalTicket(ctx.db, id, data);
+        return { success: true };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteExternalTicket(ctx.db, input.id);
+        return { success: true };
+      }),
+
+    // Notas
+    notes: protectedProcedure
+      .input(z.object({ ticketId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getTicketNotes(ctx.db, input.ticketId);
+      }),
+
+    addNote: protectedProcedure
+      .input(z.object({
+        ticketId: z.number(),
+        content: z.string().min(1),
+        noteType: z.enum(['nota', 'resposta', 'ligacao', 'email_enviado', 'whatsapp_enviado', 'atualizacao']).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const note = await addTicketNote(ctx.db, {
+          ticketId: input.ticketId,
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          content: input.content,
+          noteType: input.noteType || 'nota',
+        });
+        return note;
       }),
   }),
 });

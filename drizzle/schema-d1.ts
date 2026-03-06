@@ -329,3 +329,62 @@ export const complaintResponses = sqliteTable("complaint_responses", {
 
 export type ComplaintResponse = typeof complaintResponses.$inferSelect;
 export type InsertComplaintResponse = typeof complaintResponses.$inferInsert;
+
+// ===== CHAMADOS EXTERNOS (WhatsApp, Bitrix, Telefone, E-mail, etc.) =====
+export const externalTickets = sqliteTable("external_tickets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Protocolo único (ex: CHE-2026-00001)
+  protocol: text("protocol").notNull().unique(),
+  // Canal de origem
+  channel: text("channel", { enum: ["whatsapp", "bitrix", "telefone", "email", "instagram", "presencial", "outro"] }).default("whatsapp").notNull(),
+  // Status
+  status: text("status", { enum: ["aberto", "em_andamento", "aguardando", "resolvido", "cancelado"] }).default("aberto").notNull(),
+  // Prioridade
+  priority: text("priority", { enum: ["baixa", "media", "alta", "urgente"] }).default("media").notNull(),
+  // Tipo do chamado
+  type: text("type", { enum: ["reclamacao", "duvida", "solicitacao", "sugestao", "informacao", "outro"] }).default("reclamacao").notNull(),
+  // Dados do solicitante externo
+  contactName: text("contactName").notNull(),
+  contactPhone: text("contactPhone"),
+  contactEmail: text("contactEmail"),
+  contactCompany: text("contactCompany"), // empresa do solicitante
+  // Conteúdo do chamado
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  // Data/hora que o chamado foi recebido (pode ser diferente do createdAt)
+  receivedAt: text("receivedAt").notNull().$defaultFn(() => new Date().toISOString()),
+  // Prazo para resposta/resolução
+  dueDate: text("dueDate"),
+  // Quem registrou no sistema
+  registeredById: integer("registeredById").notNull(),
+  registeredByName: text("registeredByName"),
+  // Admin responsável pelo caso
+  assignedToId: integer("assignedToId"),
+  assignedToName: text("assignedToName"),
+  // Resolução
+  resolution: text("resolution"),
+  resolvedAt: text("resolvedAt"),
+  // Tags/etiquetas para organização
+  tags: text("tags"), // separadas por vírgula
+  // Timestamps
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type ExternalTicket = typeof externalTickets.$inferSelect;
+export type InsertExternalTicket = typeof externalTickets.$inferInsert;
+
+// Notas/acompanhamento dos chamados externos
+export const externalTicketNotes = sqliteTable("external_ticket_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ticketId: integer("ticketId").notNull(),
+  userId: integer("userId").notNull(),
+  userName: text("userName"),
+  content: text("content").notNull(),
+  // Tipo da nota: anotação interna, resposta ao cliente, ligação feita, etc.
+  noteType: text("noteType", { enum: ["nota", "resposta", "ligacao", "email_enviado", "whatsapp_enviado", "atualizacao"] }).default("nota").notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type ExternalTicketNote = typeof externalTicketNotes.$inferSelect;
+export type InsertExternalTicketNote = typeof externalTicketNotes.$inferInsert;

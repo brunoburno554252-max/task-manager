@@ -7,6 +7,7 @@ import {
   checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
   notifications, pointsAudit, ideas, highlightPoints, taskLogs, accessLogs,
   complaints, complaintResponses,
+  externalTickets, externalTicketNotes,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -1436,4 +1437,125 @@ export async function getComplaintStats(db: DrizzleD1Database) {
 export async function deleteComplaint(db: DrizzleD1Database, id: number) {
   await db.delete(complaintResponses).where(eq(complaintResponses.complaintId, id));
   await db.delete(complaints).where(eq(complaints.id, id));
+}
+
+
+// ===== CHAMADOS EXTERNOS =====
+
+// Gerar protocolo de chamado externo (CHE-2026-XXXXX)
+export async function generateTicketProtocol(db: DrizzleD1Database): Promise<string> {
+  const year = new Date().getFullYear();
+  const all = await db.select({ protocol: externalTickets.protocol }).from(externalTickets)
+    .where(like(externalTickets.protocol, `CHE-${year}-%`));
+  const maxNum = all.reduce((max, r) => {
+    const num = parseInt(r.protocol.split('-')[2], 10);
+    return num > max ? num : max;
+  }, 0);
+  return `CHE-${year}-${String(maxNum + 1).padStart(5, '0')}`;
+}
+
+// Criar chamado externo
+export async function createExternalTicket(db: DrizzleD1Database, data: {
+  protocol: string; channel: string; type: string; priority: string;
+  contactName: string; contactPhone?: string | null; contactEmail?: string | null;
+  contactCompany?: string | null; subject: string; description: string;
+  receivedAt?: string; dueDate?: string | null;
+  registeredById: number; registeredByName?: string | null;
+  assignedToId?: number | null; assignedToName?: string | null;
+  tags?: string | null;
+}) {
+  const result = await db.insert(externalTickets).values({
+    protocol: data.protocol,
+    channel: data.channel as any,
+    type: data.type as any,
+    priority: data.priority as any,
+    status: 'aberto' as any,
+    contactName: data.contactName,
+    contactPhone: data.contactPhone || null,
+    contactEmail: data.contactEmail || null,
+    contactCompany: data.contactCompany || null,
+    subject: data.subject,
+    description: data.description,
+    receivedAt: data.receivedAt || new Date().toISOString(),
+    dueDate: data.dueDate || null,
+    registeredById: data.registeredById,
+    registeredByName: data.registeredByName || null,
+    assignedToId: data.assignedToId || null,
+    assignedToName: data.assignedToName || null,
+    tags: data.tags || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }).returning();
+  return result[0];
+}
+
+// Listar chamados externos
+export async function listExternalTickets(db: DrizzleD1Database) {
+  return db.select().from(externalTickets).orderBy(desc(externalTickets.createdAt));
+}
+
+// Buscar chamado por ID
+export async function getExternalTicketById(db: DrizzleD1Database, id: number) {
+  const result = await db.select().from(externalTickets).where(eq(externalTickets.id, id));
+  return result[0] || null;
+}
+
+// Atualizar status do chamado
+export async function updateExternalTicketStatus(db: DrizzleD1Database, id: number, status: string, resolution?: string) {
+  const updateData: any = { status, updatedAt: new Date().toISOString() };
+  if (status === 'resolvido') {
+    updateData.resolvedAt = new Date().toISOString();
+    if (resolution) updateData.resolution = resolution;
+  }
+  await db.update(externalTickets).set(updateData).where(eq(externalTickets.id, id));
+}
+
+// Atualizar chamado externo (edição completa)
+export async function updateExternalTicket(db: DrizzleD1Database, id: number, data: Record<string, any>) {
+  data.updatedAt = new Date().toISOString();
+  await db.update(externalTickets).set(data).where(eq(externalTickets.id, id));
+}
+
+// Deletar chamado externo
+export async function deleteExternalTicket(db: DrizzleD1Database, id: number) {
+  await db.delete(externalTicketNotes).where(eq(externalTicketNotes.ticketId, id));
+  await db.delete(externalTickets).where(eq(externalTickets.id, id));
+}
+
+// Adicionar nota ao chamado
+export async function addTicketNote(db: DrizzleD1Database, data: {
+  ticketId: number; userId: number; userName?: string | null;
+  content: string; noteType?: string;
+}) {
+  const result = await db.insert(externalTicketNotes).values({
+    ticketId: data.ticketId,
+    userId: data.userId,
+    userName: data.userName || null,
+    content: data.content,
+    noteType: (data.noteType || 'nota') as any,
+    createdAt: new Date().toISOString(),
+  }).returning();
+  return result[0];
+}
+
+// Listar notas de um chamado
+export async function getTicketNotes(db: DrizzleD1Database, ticketId: number) {
+  return db.select().from(externalTicketNotes)
+    .where(eq(externalTicketNotes.ticketId, ticketId))
+    .orderBy(desc(externalTicketNotes.createdAt));
+}
+
+// Stats de chamados externos
+export async function getExternalTicketStats(db: DrizzleD1Database) {
+  const all = await db.select().from(externalTickets);
+  const stats: Record<string, number> = {
+    total: all.length,
+    aberto: 0, em_andamento: 0, aguardando: 0, resolvido: 0, cancelado: 0,
+    whatsapp: 0, bitrix: 0, telefone: 0, email: 0, instagram: 0, presencial: 0, outro: 0,
+  };
+  for (const t of all) {
+    stats[t.status] = (stats[t.status] || 0) + 1;
+    stats[t.channel] = (stats[t.channel] || 0) + 1;
+  }
+  return stats;
 }
