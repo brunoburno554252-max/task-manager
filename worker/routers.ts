@@ -151,12 +151,24 @@ export const appRouter = router({
           entityId: input.id,
           details: `${input.isActive ? "Reativou" : "Inativou"} o colaborador "${targetUser[0]?.name || '#' + input.id}"`,
         });
+        // Notify all admins about user status change
+        const adminsForToggle = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+        for (const admin of adminsForToggle.filter(u => u.role === 'admin' && u.id !== ctx.user.id)) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: "user_status_changed",
+            title: input.isActive ? "Colaborador reativado" : "Colaborador inativado",
+            message: `${ctx.user.name || 'Admin'} ${input.isActive ? 'reativou' : 'inativou'} o colaborador "${targetUser[0]?.name || '#' + input.id}".`,
+            entityType: "user",
+            entityId: input.id,
+          });
+        }
         return { success: true };
       }),
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        if (input.id === ctx.user.id) throw new Error("Não pode excluir a si mesmo");
+        if (input.id === ctx.user.id) throw new Error("N\u00e3o pode excluir a si mesmo");
         const targetUser = await ctx.db.select().from(users).where(eq(users.id, input.id)).limit(1);
         await ctx.db.delete(users).where(eq(users.id, input.id));
         await logActivity(ctx.db, {
@@ -166,6 +178,18 @@ export const appRouter = router({
           entityId: input.id,
           details: `Excluiu permanentemente o colaborador "${targetUser[0]?.name || '#' + input.id}"`,
         });
+        // Notify all admins about user deletion
+        const adminsForDelete = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+        for (const admin of adminsForDelete.filter(u => u.role === 'admin' && u.id !== ctx.user.id)) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: "user_deleted",
+            title: "Colaborador exclu\u00eddo",
+            message: `${ctx.user.name || 'Admin'} excluiu permanentemente o colaborador "${targetUser[0]?.name || '#' + input.id}".`,
+            entityType: "user",
+            entityId: input.id,
+          });
+        }
         return { success: true };
       }),
   }),
@@ -208,6 +232,35 @@ export const appRouter = router({
           entityId: result.id,
           details: `Criou a tarefa "${input.title}"${items && items.length > 0 ? ` com ${items.length} itens de checklist` : ""}`,
         });
+
+        // Notify assigned users about new task
+        const assignedIds = input.assigneeIds || (input.assigneeId ? [input.assigneeId] : []);
+        for (const assignedId of assignedIds) {
+          if (assignedId !== ctx.user.id) {
+            await createNotification(ctx.db, {
+              userId: assignedId,
+              type: "task_assigned",
+              title: "Nova tarefa atribu\u00edda",
+              message: `Voc\u00ea recebeu a tarefa "${input.title}" (${input.priority === 'urgent' ? '\u26a0\ufe0f URGENTE' : input.priority === 'high' ? '\u2757 Alta' : input.priority}).`,
+              entityType: "task",
+              entityId: result.id,
+            });
+          }
+        }
+
+        // Notify all admins about new task creation (except creator)
+        const allAdmins = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+        for (const admin of allAdmins.filter(u => u.role === 'admin' && u.id !== ctx.user.id)) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: "task_created",
+            title: "Nova tarefa criada",
+            message: `${ctx.user.name || 'Admin'} criou a tarefa "${input.title}" (${input.priority}).`,
+            entityType: "task",
+            entityId: result.id,
+          });
+        }
+
         return result;
       }),
 
@@ -552,8 +605,8 @@ export const appRouter = router({
         const statusLabels: Record<string, string> = {
           pending: "Pendente",
           in_progress: "Em Andamento",
-          review: "Em Análise",
-          completed: "Concluída",
+          review: "Em An\u00e1lise",
+          completed: "Conclu\u00edda",
         };
 
         await logActivity(ctx.db, {
@@ -563,6 +616,35 @@ export const appRouter = router({
           entityId: input.id,
           details: `Alterou status para "${statusLabels[targetStatus]}"`,
         });
+
+        // Notify admins about ALL status changes (except their own actions)
+        const statusAdmins = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+        for (const admin of statusAdmins.filter(u => u.role === 'admin' && u.id !== ctx.user.id)) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: "task_status_changed",
+            title: `Tarefa movida para ${statusLabels[targetStatus]}`,
+            message: `${ctx.user.name || 'Colaborador'} moveu "${task.title}" de ${statusLabels[task.status] || task.status} para ${statusLabels[targetStatus]}.`,
+            entityType: "task",
+            entityId: task.id,
+          });
+        }
+
+        // Notify assignees about status changes made by admin
+        if (ctx.user.role === 'admin') {
+          for (const assignee of allAssignees) {
+            if (assignee.id !== ctx.user.id) {
+              await createNotification(ctx.db, {
+                userId: assignee.id,
+                type: "task_status_changed",
+                title: `Tarefa movida para ${statusLabels[targetStatus]}`,
+                message: `O admin moveu sua tarefa "${task.title}" para ${statusLabels[targetStatus]}.`,
+                entityType: "task",
+                entityId: task.id,
+              });
+            }
+          }
+        }
 
         return { success: true };
       }),
@@ -1235,6 +1317,69 @@ export const appRouter = router({
         return getHighlightPointsByUser(ctx.db, input.userId);
       }),
    }),
+
+  // ===== OVERDUE CHECK (notifica admins sobre tarefas que ficaram atrasadas) =====
+  overdueCheck: router({
+    run: adminProcedure.mutation(async ({ ctx }) => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const now = todayStart.getTime();
+
+      // Get all tasks that are overdue and NOT completed
+      const allTasks = await ctx.db.select().from(tasks);
+      const overdueTasks = allTasks.filter(
+        (t: any) => t.dueDate && t.dueDate < now && t.status !== 'completed'
+      );
+
+      // Get recent notifications to avoid duplicates (last 24h)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const recentNotifs = await ctx.db.select().from(notifications)
+        .where(and(
+          eq(notifications.type, 'task_overdue'),
+          sql`${notifications.createdAt} > ${oneDayAgo}`
+        ));
+      const recentlyNotifiedTaskIds = new Set(recentNotifs.map(n => n.entityId));
+
+      const admins = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+      const adminUsers = admins.filter(u => u.role === 'admin');
+      let notifiedCount = 0;
+
+      for (const task of overdueTasks) {
+        if (recentlyNotifiedTaskIds.has(task.id)) continue; // Skip already notified
+
+        const daysOverdue = Math.ceil((Date.now() - task.dueDate!) / (1000 * 60 * 60 * 24));
+        const assignees = await getTaskAssignees(ctx.db, task.id);
+        const assigneeNames = assignees.map((a: any) => a.name).filter(Boolean).join(', ') || 'Sem responsável';
+
+        for (const admin of adminUsers) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: 'task_overdue',
+            title: `Tarefa atrasada (${daysOverdue} dia${daysOverdue > 1 ? 's' : ''})`,
+            message: `"${task.title}" está ${daysOverdue} dia(s) atrasada. Responsável: ${assigneeNames}.`,
+            entityType: 'task',
+            entityId: task.id,
+          });
+        }
+
+        // Also notify assignees
+        for (const assignee of assignees) {
+          await createNotification(ctx.db, {
+            userId: assignee.id,
+            type: 'task_overdue',
+            title: 'Sua tarefa está atrasada!',
+            message: `A tarefa "${task.title}" está ${daysOverdue} dia(s) atrasada. Conclua o mais rápido possível.`,
+            entityType: 'task',
+            entityId: task.id,
+          });
+        }
+
+        notifiedCount++;
+      }
+
+      return { checked: overdueTasks.length, notified: notifiedCount };
+    }),
+  }),
 
   // ===== LOGS DE ACESSO À PLATAFORMA =====
   access: router({

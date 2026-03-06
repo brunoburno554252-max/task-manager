@@ -29,8 +29,9 @@ import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
   Bell, CheckCircle2, Eye, XCircle, Clock, Loader2, Lightbulb, Star,
+  AlertTriangle, ArrowRightLeft, UserPlus, UserX, Trash2, Volume2,
 } from "lucide-react";
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -79,6 +80,16 @@ function NotificationPanel({
       case "task_review": return <Eye className="h-4 w-4 text-purple-500" />;
       case "task_approved": return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
       case "task_rejected": return <XCircle className="h-4 w-4 text-red-500" />;
+      case "task_assigned": return <UserPlus className="h-4 w-4 text-cyan-500" />;
+      case "task_created": return <Zap className="h-4 w-4 text-indigo-500" />;
+      case "task_status_changed": return <ArrowRightLeft className="h-4 w-4 text-amber-500" />;
+      case "task_overdue": return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case "user_status_changed": return <UserX className="h-4 w-4 text-amber-500" />;
+      case "user_deleted": return <Trash2 className="h-4 w-4 text-red-500" />;
+      case "idea_approved": return <Lightbulb className="h-4 w-4 text-emerald-500" />;
+      case "idea_rejected": return <XCircle className="h-4 w-4 text-red-400" />;
+      case "idea_analysis": return <Eye className="h-4 w-4 text-blue-500" />;
+      case "highlight_points": return <Star className="h-4 w-4 text-yellow-500" />;
       case "chat_message": return <MessageCircle className="h-4 w-4 text-blue-400" />;
       default: return <Bell className="h-4 w-4 text-blue-500" />;
     }
@@ -89,6 +100,16 @@ function NotificationPanel({
       case "task_review": return "bg-purple-500/10";
       case "task_approved": return "bg-emerald-500/10";
       case "task_rejected": return "bg-red-500/10";
+      case "task_assigned": return "bg-cyan-500/10";
+      case "task_created": return "bg-indigo-500/10";
+      case "task_status_changed": return "bg-amber-500/10";
+      case "task_overdue": return "bg-red-500/10";
+      case "user_status_changed": return "bg-amber-500/10";
+      case "user_deleted": return "bg-red-500/10";
+      case "idea_approved": return "bg-emerald-500/10";
+      case "idea_rejected": return "bg-red-400/10";
+      case "idea_analysis": return "bg-blue-500/10";
+      case "highlight_points": return "bg-yellow-500/10";
       case "chat_message": return "bg-blue-400/10";
       default: return "bg-blue-500/10";
     }
@@ -155,13 +176,20 @@ function NotificationPanel({
                 if (!n.isRead) onMarkRead(n.id);
                 if (n.entityType === "chat") {
                   onNavigate("/chat");
+                } else if (n.type === "task_overdue" && n.entityId) {
+                  onNavigate("/tasks?status=overdue");
                 } else if (n.entityType === "task" && n.entityId) {
-                  // Navigate to the collaborator's Kanban if we have the assigneeId
                   if (n.taskAssigneeId) {
                     onNavigate(`/kanban/${n.taskAssigneeId}`);
                   } else {
-                    onNavigate("/kanban");
+                    onNavigate("/tasks");
                   }
+                } else if (n.entityType === "user") {
+                  onNavigate("/collaborators");
+                } else if (n.entityType === "idea") {
+                  onNavigate("/ideas");
+                } else if (n.entityType === "highlight") {
+                  onNavigate("/highlight");
                 }
                 onClose();
               }}
@@ -274,12 +302,77 @@ function DashboardLayoutContent({
   const overdueCount = dashStats?.overdue ?? 0;
 
   // Notifications
-  const { data: unreadNotifCount, refetch: refetchNotifCount } = trpc.notifications.unreadCount.useQuery(undefined, { refetchInterval: 15000 });
-  const { data: notifList, refetch: refetchNotifs } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000 });
+  const { data: unreadNotifCount, refetch: refetchNotifCount } = trpc.notifications.unreadCount.useQuery(undefined, { refetchInterval: 10000 });
+  const { data: notifList, refetch: refetchNotifs } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 10000 });
   const markReadMutation = trpc.notifications.markRead.useMutation({ onSuccess: () => { refetchNotifCount(); refetchNotifs(); } });
   const markAllReadMutation = trpc.notifications.markAllRead.useMutation({ onSuccess: () => { refetchNotifCount(); refetchNotifs(); } });
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const prevUnreadCount = useRef<number>(0);
+  const [bellShake, setBellShake] = useState(false);
+
+  // Notification sound system
+  const playNotificationSound = useCallback(() => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // First tone (higher pitch)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+      osc1.type = 'sine';
+      gain1.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc1.start(audioCtx.currentTime);
+      osc1.stop(audioCtx.currentTime + 0.3);
+
+      // Second tone (even higher, delayed)
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.frequency.setValueAtTime(1174.66, audioCtx.currentTime + 0.15); // D6
+      osc2.type = 'sine';
+      gain2.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain2.gain.setValueAtTime(0.15, audioCtx.currentTime + 0.15);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      osc2.start(audioCtx.currentTime + 0.15);
+      osc2.stop(audioCtx.currentTime + 0.5);
+
+      // Third tone (highest, pleasant chime)
+      const osc3 = audioCtx.createOscillator();
+      const gain3 = audioCtx.createGain();
+      osc3.connect(gain3);
+      gain3.connect(audioCtx.destination);
+      osc3.frequency.setValueAtTime(1318.51, audioCtx.currentTime + 0.3); // E6
+      osc3.type = 'sine';
+      gain3.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain3.gain.setValueAtTime(0.12, audioCtx.currentTime + 0.3);
+      gain3.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.7);
+      osc3.start(audioCtx.currentTime + 0.3);
+      osc3.stop(audioCtx.currentTime + 0.7);
+
+      // Cleanup
+      setTimeout(() => audioCtx.close(), 1000);
+    } catch (e) {
+      // Silently fail if audio is not available
+    }
+  }, []);
+
+  // Play sound and shake bell when new notifications arrive
+  useEffect(() => {
+    const currentCount = unreadNotifCount ?? 0;
+    if (currentCount > prevUnreadCount.current && prevUnreadCount.current >= 0) {
+      // New notification arrived!
+      if (prevUnreadCount.current > 0 || currentCount > 0) {
+        playNotificationSound();
+        setBellShake(true);
+        setTimeout(() => setBellShake(false), 1000);
+      }
+    }
+    prevUnreadCount.current = currentCount;
+  }, [unreadNotifCount, playNotificationSound]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -354,12 +447,13 @@ function DashboardLayoutContent({
             ? "bg-primary/10 text-primary"
             : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
         }`}
-        aria-label="Notificações"
+        aria-label="Notifica\u00e7\u00f5es"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className={`h-5 w-5 transition-transform ${bellShake ? 'animate-bounce' : ''}`} />
         {(unreadNotifCount ?? 0) > 0 && (
           <span className="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-background animate-in zoom-in duration-200">
             {(unreadNotifCount ?? 0) > 9 ? "9+" : unreadNotifCount}
+            <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-30" />
           </span>
         )}
       </button>

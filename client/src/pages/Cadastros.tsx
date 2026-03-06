@@ -12,9 +12,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Users, UserPlus, Loader2, Pencil, Trash2, Phone, Mail, Shield,
   Clock, Activity, CalendarDays, Eye, LogIn, Monitor, TrendingUp, TrendingDown, Minus,
-  UserX, UserCheck, AlertTriangle, Search,
+  UserX, UserCheck, AlertTriangle, Search, MoreVertical,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
@@ -335,46 +342,53 @@ export default function Cadastros() {
                   <span className="text-[10px] text-muted-foreground">{uniqueDays} dia{uniqueDays !== 1 ? "s" : ""}</span>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setAccessLogUser({ id: collab.id, name: collab.name || "Colaborador" })}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
-                    title="Ver logs de acesso"
-                  >
-                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => handleEdit(collab)}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
-                    title="Editar colaborador"
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                  {!isSelf && (
-                    <>
-                      <button
-                        onClick={() => setDeactivateUser({ id: collab.id, name: collab.name || "Colaborador", isActive: !isInactive })}
-                        className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
-                          isInactive ? "hover:bg-emerald-500/20" : "hover:bg-amber-500/20"
-                        }`}
-                        title={isInactive ? "Reativar colaborador" : "Inativar colaborador"}
-                      >
-                        {isInactive ? (
-                          <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
-                        ) : (
-                          <UserX className="h-3.5 w-3.5 text-amber-500" />
-                        )}
+                {/* Actions - Dropdown Menu */}
+                <div className="flex items-center">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors focus:outline-none">
+                        <MoreVertical className="h-4 w-4 text-muted-foreground" />
                       </button>
-                      <button
-                        onClick={() => setDeleteUserTarget({ id: collab.id, name: collab.name || "Colaborador" })}
-                        className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-red-500/20 transition-colors"
-                        title="Excluir permanentemente"
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        onClick={() => setAccessLogUser({ id: collab.id, name: collab.name || "Colaborador" })}
+                        className="gap-2 cursor-pointer"
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                      </button>
-                    </>
-                  )}
+                        <Eye className="h-4 w-4 text-blue-500" />
+                        <span>Ver logs de acesso</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleEdit(collab)}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Pencil className="h-4 w-4 text-primary" />
+                        <span>Editar colaborador</span>
+                      </DropdownMenuItem>
+                      {!isSelf && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeactivateUser({ id: collab.id, name: collab.name || "Colaborador", isActive: !isInactive })}
+                            className="gap-2 cursor-pointer"
+                          >
+                            {isInactive ? (
+                              <><UserCheck className="h-4 w-4 text-emerald-500" /><span className="text-emerald-500">Reativar colaborador</span></>
+                            ) : (
+                              <><UserX className="h-4 w-4 text-amber-500" /><span className="text-amber-500">Inativar colaborador</span></>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setDeleteUserTarget({ id: collab.id, name: collab.name || "Colaborador" })}
+                            className="gap-2 cursor-pointer text-red-500 focus:text-red-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>Excluir permanentemente</span>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             );
