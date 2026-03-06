@@ -324,7 +324,7 @@ export default function OuvidoriaCEO() {
               occurrenceDate: formOccurrenceDate || undefined,
               occurrenceLocation: formOccurrenceLocation || undefined,
               isAnonymous: formIsAnonymous,
-            })} disabled={createMutation.isPending || !formSubject || formDescription.length < 10}>
+            })} disabled={createMutation.isPending || !formSubject.trim() || formDescription.trim().length < 3}>
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
               Enviar Registro
             </Button>

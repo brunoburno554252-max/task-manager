@@ -28,8 +28,11 @@ app.post("/api/public/complaint", async (c) => {
     if (!type || !category || !subject || !description) {
       return c.json({ error: 'Campos obrigatórios: type, category, subject, description' }, 400);
     }
-    if (subject.length < 3 || description.length < 10) {
-      return c.json({ error: 'Assunto mínimo 3 caracteres, descrição mínimo 10 caracteres' }, 400);
+    if (subject.trim().length < 2) {
+      return c.json({ error: 'Assunto deve ter no mínimo 2 caracteres' }, 400);
+    }
+    if (description.trim().length < 3) {
+      return c.json({ error: 'Descrição deve ter no mínimo 3 caracteres' }, 400);
     }
 
     const { drizzle } = await import('drizzle-orm/d1');

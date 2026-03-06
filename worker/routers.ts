@@ -1477,7 +1477,7 @@ export const appRouter = router({
         category: z.enum(['atendimento', 'infraestrutura', 'gestao', 'comunicacao', 'seguranca', 'outros']),
         priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
         subject: z.string().min(3).max(500),
-        description: z.string().min(10).max(10000),
+        description: z.string().min(3).max(10000),
         occurrenceDate: z.string().optional(),
         occurrenceLocation: z.string().max(500).optional(),
         isAnonymous: z.boolean().optional(),

@@ -70,8 +70,12 @@ export default function OuvidoriaPublica() {
   };
 
   const handleSubmit = async () => {
-    if (!formSubject || formDescription.length < 10) {
-      setError("Preencha todos os campos obrigatórios.");
+    if (!formSubject.trim()) {
+      setError("Preencha o campo Assunto.");
+      return;
+    }
+    if (formDescription.trim().length < 3) {
+      setError("A descrição deve ter no mínimo 3 caracteres.");
       return;
     }
     setLoading(true); setError("");
@@ -229,7 +233,7 @@ export default function OuvidoriaPublica() {
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Descrição detalhada *</label>
                 <Textarea placeholder="Descreva com o máximo de detalhes possível o que aconteceu, quando, onde e quem estava envolvido..."
                   value={formDescription} onChange={(e) => setFormDescription(e.target.value)} rows={6} maxLength={10000} />
-                <p className="text-xs text-muted-foreground mt-1">{formDescription.length}/10000 (mínimo 10 caracteres)</p>
+                <p className="text-xs text-muted-foreground mt-1">{formDescription.length}/10000</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -282,7 +286,7 @@ export default function OuvidoriaPublica() {
 
               {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
 
-              <Button onClick={handleSubmit} disabled={loading || !formSubject || formDescription.length < 10}
+              <Button onClick={handleSubmit} disabled={loading}
                 className="w-full h-12 text-base gap-2">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 Enviar Registro
