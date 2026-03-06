@@ -29,7 +29,7 @@ import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
   Bell, CheckCircle2, Eye, XCircle, Clock, Loader2, Lightbulb, Star,
-  AlertTriangle, ArrowRightLeft, UserPlus, UserX, Trash2, Volume2,
+  AlertTriangle, ArrowRightLeft, UserPlus, UserX, Trash2, Volume2, Megaphone,
 } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -49,6 +49,7 @@ const menuItems = [
   { icon: Activity, label: "Central de Tarefas", path: "/tasks" },
   { icon: Lightbulb, label: "Caixa de Ideias", path: "/ideas" },
   { icon: Star, label: "Colaborador Destaque", path: "/highlight" },
+  { icon: Megaphone, label: "Ouvidoria CEO", path: "/ouvidoria" },
   { icon: Settings, label: "Configurações", path: "/settings", adminOnly: true },
 ];
 
@@ -91,6 +92,10 @@ function NotificationPanel({
       case "idea_analysis": return <Eye className="h-4 w-4 text-blue-500" />;
       case "highlight_points": return <Star className="h-4 w-4 text-yellow-500" />;
       case "chat_message": return <MessageCircle className="h-4 w-4 text-blue-400" />;
+      case "complaint_new": return <Megaphone className="h-4 w-4 text-red-500" />;
+      case "complaint_status_changed": return <ArrowRightLeft className="h-4 w-4 text-purple-500" />;
+      case "complaint_resolved": return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+      case "complaint_response": return <MessageCircle className="h-4 w-4 text-cyan-500" />;
       default: return <Bell className="h-4 w-4 text-blue-500" />;
     }
   };
@@ -111,6 +116,10 @@ function NotificationPanel({
       case "idea_analysis": return "bg-blue-500/10";
       case "highlight_points": return "bg-yellow-500/10";
       case "chat_message": return "bg-blue-400/10";
+      case "complaint_new": return "bg-red-500/10";
+      case "complaint_status_changed": return "bg-purple-500/10";
+      case "complaint_resolved": return "bg-emerald-500/10";
+      case "complaint_response": return "bg-cyan-500/10";
       default: return "bg-blue-500/10";
     }
   };
@@ -190,6 +199,8 @@ function NotificationPanel({
                   onNavigate("/ideas");
                 } else if (n.entityType === "highlight") {
                   onNavigate("/highlight");
+                } else if (n.entityType === "complaint") {
+                  onNavigate("/ouvidoria");
                 }
                 onClose();
               }}
@@ -246,6 +257,11 @@ export default function DashboardLayout({
 
   if (loading) {
     return <DashboardLayoutSkeleton />
+  }
+
+  // Ouvidoria pública não precisa de login nem sidebar
+  if (window.location.pathname === '/ouvidoria-publica') {
+    return <>{children}</>;
   }
 
   if (!user) {

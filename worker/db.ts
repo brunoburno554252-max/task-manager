@@ -6,6 +6,7 @@ import {
   Badge, taskComments, chatMessages,
   checklistItems, taskAttachments, companies, companyMembers, taskAssignees,
   notifications, pointsAudit, ideas, highlightPoints, taskLogs, accessLogs,
+  complaints, complaintResponses,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -1260,4 +1261,179 @@ export async function getAccessStats(db: DrizzleD1Database, daysBack: number = 3
     .groupBy(accessLogs.userId);
 
   return result;
+}
+
+// ===== OUVIDORIA CEO =====
+
+// Gerar protocolo único
+export async function generateProtocol(db: DrizzleD1Database): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `OUV-${year}-`;
+  const existing = await db.select({ protocol: complaints.protocol })
+    .from(complaints)
+    .where(sql`${complaints.protocol} LIKE ${prefix + '%'}`)
+    .orderBy(desc(complaints.id))
+    .limit(1);
+  
+  let nextNum = 1;
+  if (existing.length > 0) {
+    const lastNum = parseInt(existing[0].protocol.replace(prefix, ''), 10);
+    if (!isNaN(lastNum)) nextNum = lastNum + 1;
+  }
+  return `${prefix}${String(nextNum).padStart(5, '0')}`;
+}
+
+// Criar reclamação
+export async function createComplaint(db: DrizzleD1Database, data: {
+  protocol: string;
+  type: string;
+  category: string;
+  priority?: string;
+  subject: string;
+  description: string;
+  occurrenceDate?: string | null;
+  occurrenceLocation?: string | null;
+  authorId?: number | null;
+  authorName?: string | null;
+  authorEmail?: string | null;
+  authorPhone?: string | null;
+  isAnonymous?: boolean;
+  isExternal?: boolean;
+  ipAddress?: string | null;
+}) {
+  const result = await db.insert(complaints).values({
+    protocol: data.protocol,
+    type: data.type as any,
+    category: data.category as any,
+    priority: (data.priority || 'media') as any,
+    subject: data.subject,
+    description: data.description,
+    occurrenceDate: data.occurrenceDate || null,
+    occurrenceLocation: data.occurrenceLocation || null,
+    authorId: data.authorId || null,
+    authorName: data.authorName || null,
+    authorEmail: data.authorEmail || null,
+    authorPhone: data.authorPhone || null,
+    isAnonymous: data.isAnonymous ? 1 : 0,
+    isExternal: data.isExternal ? 1 : 0,
+    ipAddress: data.ipAddress || null,
+  }).returning();
+  return result[0];
+}
+
+// Listar reclamações (admin vê tudo, colaborador vê só as suas)
+export async function listComplaints(db: DrizzleD1Database, filters?: {
+  authorId?: number;
+  status?: string;
+  type?: string;
+  category?: string;
+  priority?: string;
+  search?: string;
+  limit?: number;
+}) {
+  let query = db.select().from(complaints).orderBy(desc(complaints.createdAt));
+  
+  const conditions: any[] = [];
+  if (filters?.authorId) conditions.push(eq(complaints.authorId, filters.authorId));
+  if (filters?.status) conditions.push(eq(complaints.status, filters.status as any));
+  if (filters?.type) conditions.push(eq(complaints.type, filters.type as any));
+  if (filters?.category) conditions.push(eq(complaints.category, filters.category as any));
+  if (filters?.priority) conditions.push(eq(complaints.priority, filters.priority as any));
+  if (filters?.search) {
+    conditions.push(sql`(${complaints.subject} LIKE ${'%' + filters.search + '%'} OR ${complaints.protocol} LIKE ${'%' + filters.search + '%'} OR ${complaints.description} LIKE ${'%' + filters.search + '%'})`);
+  }
+  
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+  
+  if (filters?.limit) {
+    query = query.limit(filters.limit) as any;
+  }
+  
+  return query;
+}
+
+// Buscar reclamação por ID
+export async function getComplaintById(db: DrizzleD1Database, id: number) {
+  const result = await db.select().from(complaints).where(eq(complaints.id, id)).limit(1);
+  return result[0] || null;
+}
+
+// Buscar reclamação por protocolo
+export async function getComplaintByProtocol(db: DrizzleD1Database, protocol: string) {
+  const result = await db.select().from(complaints).where(eq(complaints.protocol, protocol)).limit(1);
+  return result[0] || null;
+}
+
+// Atualizar reclamação
+export async function updateComplaint(db: DrizzleD1Database, id: number, data: Partial<{
+  status: string;
+  priority: string;
+  assignedToId: number | null;
+  resolution: string | null;
+  resolvedAt: string | null;
+  resolvedById: number | null;
+}>) {
+  const updateData: any = { ...data, updatedAt: new Date().toISOString() };
+  await db.update(complaints).set(updateData).where(eq(complaints.id, id));
+}
+
+// Criar resposta a uma reclamação
+export async function createComplaintResponse(db: DrizzleD1Database, data: {
+  complaintId: number;
+  userId?: number | null;
+  userName?: string | null;
+  message: string;
+  isInternal?: boolean;
+}) {
+  const result = await db.insert(complaintResponses).values({
+    complaintId: data.complaintId,
+    userId: data.userId || null,
+    userName: data.userName || null,
+    message: data.message,
+    isInternal: data.isInternal ? 1 : 0,
+  }).returning();
+  return result[0];
+}
+
+// Listar respostas de uma reclamação
+export async function getComplaintResponses(db: DrizzleD1Database, complaintId: number, includeInternal: boolean = false) {
+  if (includeInternal) {
+    return db.select().from(complaintResponses)
+      .where(eq(complaintResponses.complaintId, complaintId))
+      .orderBy(complaintResponses.createdAt);
+  }
+  return db.select().from(complaintResponses)
+    .where(and(
+      eq(complaintResponses.complaintId, complaintId),
+      eq(complaintResponses.isInternal, 0)
+    ))
+    .orderBy(complaintResponses.createdAt);
+}
+
+// Estatísticas da ouvidoria
+export async function getComplaintStats(db: DrizzleD1Database) {
+  const all = await db.select().from(complaints);
+  return {
+    total: all.length,
+    novo: all.filter(c => c.status === 'novo').length,
+    em_analise: all.filter(c => c.status === 'em_analise').length,
+    em_andamento: all.filter(c => c.status === 'em_andamento').length,
+    respondido: all.filter(c => c.status === 'respondido').length,
+    concluido: all.filter(c => c.status === 'concluido').length,
+    arquivado: all.filter(c => c.status === 'arquivado').length,
+    reclamacao: all.filter(c => c.type === 'reclamacao').length,
+    sugestao: all.filter(c => c.type === 'sugestao').length,
+    elogio: all.filter(c => c.type === 'elogio').length,
+    denuncia: all.filter(c => c.type === 'denuncia').length,
+    anonimas: all.filter(c => c.isAnonymous === 1).length,
+    externas: all.filter(c => c.isExternal === 1).length,
+  };
+}
+
+// Deletar reclamação
+export async function deleteComplaint(db: DrizzleD1Database, id: number) {
+  await db.delete(complaintResponses).where(eq(complaintResponses.complaintId, id));
+  await db.delete(complaints).where(eq(complaints.id, id));
 }

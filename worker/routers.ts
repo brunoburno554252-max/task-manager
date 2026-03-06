@@ -23,6 +23,8 @@ import {
   addHighlightPoints, getHighlightPointsLog, getHighlightPointsByUser,
   createTaskLog, getTaskLogs, getTaskLogsByCollaborator,
   logAccess, getAccessLogs, getAccessStats,
+  generateProtocol, createComplaint, listComplaints, getComplaintById, getComplaintByProtocol,
+  updateComplaint, createComplaintResponse, getComplaintResponses, getComplaintStats, deleteComplaint,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -1420,6 +1422,268 @@ export const appRouter = router({
       .input(z.object({ daysBack: z.number().optional() }).optional())
       .query(async ({ ctx, input }) => {
         return getAccessStats(ctx.db, input?.daysBack ?? 30);
+      }),
+  }),
+
+  // ===== OUVIDORIA CEO =====
+  complaints: router({
+    // Listar reclamações (admin vê tudo, colaborador vê só as suas)
+    list: protectedProcedure
+      .input(z.object({
+        status: z.string().optional(),
+        type: z.string().optional(),
+        category: z.string().optional(),
+        priority: z.string().optional(),
+        search: z.string().optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const filters: any = { ...input };
+        if (ctx.user.role !== 'admin') {
+          filters.authorId = ctx.user.id;
+        }
+        return listComplaints(ctx.db, filters);
+      }),
+
+    // Buscar por ID
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const complaint = await getComplaintById(ctx.db, input.id);
+        if (!complaint) throw new Error('Reclama\u00e7\u00e3o n\u00e3o encontrada');
+        // Non-admin can only see their own
+        if (ctx.user.role !== 'admin' && complaint.authorId !== ctx.user.id) {
+          throw new Error('Sem permiss\u00e3o');
+        }
+        return complaint;
+      }),
+
+    // Buscar por protocolo
+    getByProtocol: protectedProcedure
+      .input(z.object({ protocol: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const complaint = await getComplaintByProtocol(ctx.db, input.protocol);
+        if (!complaint) throw new Error('Protocolo n\u00e3o encontrado');
+        if (ctx.user.role !== 'admin' && complaint.authorId !== ctx.user.id) {
+          throw new Error('Sem permiss\u00e3o');
+        }
+        return complaint;
+      }),
+
+    // Criar reclama\u00e7\u00e3o (interno - logado)
+    create: protectedProcedure
+      .input(z.object({
+        type: z.enum(['reclamacao', 'sugestao', 'elogio', 'denuncia']),
+        category: z.enum(['atendimento', 'infraestrutura', 'gestao', 'comunicacao', 'seguranca', 'outros']),
+        priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
+        subject: z.string().min(3).max(500),
+        description: z.string().min(10).max(10000),
+        occurrenceDate: z.string().optional(),
+        occurrenceLocation: z.string().max(500).optional(),
+        isAnonymous: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await generateProtocol(ctx.db);
+        const complaint = await createComplaint(ctx.db, {
+          protocol,
+          type: input.type,
+          category: input.category,
+          priority: input.priority,
+          subject: input.subject,
+          description: input.description,
+          occurrenceDate: input.occurrenceDate,
+          occurrenceLocation: input.occurrenceLocation,
+          authorId: input.isAnonymous ? null : ctx.user.id,
+          authorName: input.isAnonymous ? null : ctx.user.name,
+          isAnonymous: input.isAnonymous || false,
+          isExternal: false,
+        });
+
+        // Notify all admins
+        const admins = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+        for (const admin of admins.filter(u => u.role === 'admin')) {
+          await createNotification(ctx.db, {
+            userId: admin.id,
+            type: 'complaint_new',
+            title: `Nova ${input.type === 'reclamacao' ? 'reclama\u00e7\u00e3o' : input.type === 'sugestao' ? 'sugest\u00e3o' : input.type === 'elogio' ? 'elogio' : 'den\u00fancia'} na Ouvidoria`,
+            message: `${input.isAnonymous ? 'An\u00f4nimo' : ctx.user.name || 'Colaborador'} registrou: "${input.subject}" [${protocol}]`,
+            entityType: 'complaint',
+            entityId: complaint.id,
+          });
+        }
+
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: 'complaint_created',
+          entityType: 'complaint',
+          entityId: complaint.id,
+          details: `Nova ${input.type} na ouvidoria: ${input.subject} [${protocol}]`,
+        });
+
+        return complaint;
+      }),
+
+    // Atualizar status (admin)
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(['novo', 'em_analise', 'em_andamento', 'respondido', 'concluido', 'arquivado']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const complaint = await getComplaintById(ctx.db, input.id);
+        if (!complaint) throw new Error('N\u00e3o encontrada');
+        await updateComplaint(ctx.db, input.id, { status: input.status });
+
+        const statusLabels: Record<string, string> = {
+          novo: 'Novo', em_analise: 'Em An\u00e1lise', em_andamento: 'Em Andamento',
+          respondido: 'Respondido', concluido: 'Conclu\u00eddo', arquivado: 'Arquivado',
+        };
+
+        // Notify author if not anonymous
+        if (complaint.authorId) {
+          await createNotification(ctx.db, {
+            userId: complaint.authorId,
+            type: 'complaint_status_changed',
+            title: `Ouvidoria: Status atualizado`,
+            message: `Seu registro [${complaint.protocol}] foi movido para "${statusLabels[input.status]}".`,
+            entityType: 'complaint',
+            entityId: complaint.id,
+          });
+        }
+
+        await logActivity(ctx.db, {
+          userId: ctx.user.id,
+          action: 'complaint_status_changed',
+          entityType: 'complaint',
+          entityId: input.id,
+          details: `Status alterado para "${statusLabels[input.status]}" [${complaint.protocol}]`,
+        });
+
+        return { success: true };
+      }),
+
+    // Atribuir admin respons\u00e1vel
+    assign: adminProcedure
+      .input(z.object({ id: z.number(), assignedToId: z.number().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        await updateComplaint(ctx.db, input.id, { assignedToId: input.assignedToId });
+        return { success: true };
+      }),
+
+    // Resolver reclama\u00e7\u00e3o
+    resolve: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        resolution: z.string().min(5).max(10000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const complaint = await getComplaintById(ctx.db, input.id);
+        if (!complaint) throw new Error('N\u00e3o encontrada');
+
+        await updateComplaint(ctx.db, input.id, {
+          status: 'concluido',
+          resolution: input.resolution,
+          resolvedAt: new Date().toISOString(),
+          resolvedById: ctx.user.id,
+        });
+
+        // Notify author
+        if (complaint.authorId) {
+          await createNotification(ctx.db, {
+            userId: complaint.authorId,
+            type: 'complaint_resolved',
+            title: 'Ouvidoria: Seu registro foi conclu\u00eddo',
+            message: `Seu registro [${complaint.protocol}] "${complaint.subject}" foi conclu\u00eddo com resolu\u00e7\u00e3o.`,
+            entityType: 'complaint',
+            entityId: complaint.id,
+          });
+        }
+
+        return { success: true };
+      }),
+
+    // Responder/comentar
+    respond: protectedProcedure
+      .input(z.object({
+        complaintId: z.number(),
+        message: z.string().min(1).max(10000),
+        isInternal: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const complaint = await getComplaintById(ctx.db, input.complaintId);
+        if (!complaint) throw new Error('N\u00e3o encontrada');
+
+        // Non-admin can only respond to their own and not internal
+        if (ctx.user.role !== 'admin') {
+          if (complaint.authorId !== ctx.user.id) throw new Error('Sem permiss\u00e3o');
+          input.isInternal = false;
+        }
+
+        const response = await createComplaintResponse(ctx.db, {
+          complaintId: input.complaintId,
+          userId: ctx.user.id,
+          userName: ctx.user.name,
+          message: input.message,
+          isInternal: input.isInternal || false,
+        });
+
+        // If admin responds (public), notify author
+        if (ctx.user.role === 'admin' && !input.isInternal && complaint.authorId) {
+          await createNotification(ctx.db, {
+            userId: complaint.authorId,
+            type: 'complaint_response',
+            title: 'Ouvidoria: Nova resposta',
+            message: `Seu registro [${complaint.protocol}] recebeu uma resposta.`,
+            entityType: 'complaint',
+            entityId: complaint.id,
+          });
+          // Also update status to 'respondido' if it was 'em_analise' or 'em_andamento'
+          if (['em_analise', 'em_andamento', 'novo'].includes(complaint.status)) {
+            await updateComplaint(ctx.db, input.complaintId, { status: 'respondido' });
+          }
+        }
+
+        // If collaborator responds, notify admins
+        if (ctx.user.role !== 'admin') {
+          const admins = await ctx.db.select({ id: users.id, role: users.role }).from(users);
+          for (const admin of admins.filter(u => u.role === 'admin')) {
+            await createNotification(ctx.db, {
+              userId: admin.id,
+              type: 'complaint_response',
+              title: 'Ouvidoria: Nova mensagem do autor',
+              message: `${ctx.user.name || 'Colaborador'} respondeu no registro [${complaint.protocol}].`,
+              entityType: 'complaint',
+              entityId: complaint.id,
+            });
+          }
+        }
+
+        return response;
+      }),
+
+    // Listar respostas
+    responses: protectedProcedure
+      .input(z.object({ complaintId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const complaint = await getComplaintById(ctx.db, input.complaintId);
+        if (!complaint) throw new Error('N\u00e3o encontrada');
+        if (ctx.user.role !== 'admin' && complaint.authorId !== ctx.user.id) {
+          throw new Error('Sem permiss\u00e3o');
+        }
+        return getComplaintResponses(ctx.db, input.complaintId, ctx.user.role === 'admin');
+      }),
+
+    // Estat\u00edsticas
+    stats: adminProcedure.query(async ({ ctx }) => {
+      return getComplaintStats(ctx.db);
+    }),
+
+    // Deletar (admin)
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteComplaint(ctx.db, input.id);
+        return { success: true };
       }),
   }),
 });

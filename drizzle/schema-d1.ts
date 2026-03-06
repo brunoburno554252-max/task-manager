@@ -269,3 +269,63 @@ export const accessLogs = sqliteTable("access_logs", {
 });
 export type AccessLog = typeof accessLogs.$inferSelect;
 export type InsertAccessLog = typeof accessLogs.$inferInsert;
+
+// ===== OUVIDORIA CEO =====
+export const complaints = sqliteTable("complaints", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Protocolo único para rastreamento (ex: OUV-2026-00001)
+  protocol: text("protocol").notNull().unique(),
+  // Tipo: reclamacao, sugestao, elogio, denuncia
+  type: text("type", { enum: ["reclamacao", "sugestao", "elogio", "denuncia"] }).default("reclamacao").notNull(),
+  // Categoria: atendimento, infraestrutura, gestao, comunicacao, seguranca, outros
+  category: text("category", { enum: ["atendimento", "infraestrutura", "gestao", "comunicacao", "seguranca", "outros"] }).default("outros").notNull(),
+  // Prioridade
+  priority: text("priority", { enum: ["baixa", "media", "alta", "urgente"] }).default("media").notNull(),
+  // Status do andamento
+  status: text("status", { enum: ["novo", "em_analise", "em_andamento", "respondido", "concluido", "arquivado"] }).default("novo").notNull(),
+  // Assunto e descrição detalhada
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  // Data da ocorrência (quando o fato aconteceu)
+  occurrenceDate: text("occurrenceDate"),
+  // Local da ocorrência
+  occurrenceLocation: text("occurrenceLocation"),
+  // Autor (null = anônimo externo)
+  authorId: integer("authorId"),
+  authorName: text("authorName"), // Para externos que queiram se identificar
+  authorEmail: text("authorEmail"), // Para contato de retorno
+  authorPhone: text("authorPhone"),
+  // Se é anônimo
+  isAnonymous: integer("isAnonymous").default(0).notNull(),
+  // Se veio do formulário externo
+  isExternal: integer("isExternal").default(0).notNull(),
+  // Admin responsável pelo caso
+  assignedToId: integer("assignedToId"),
+  // Resolução final
+  resolution: text("resolution"),
+  resolvedAt: text("resolvedAt"),
+  resolvedById: integer("resolvedById"),
+  // IP do remetente (para externos)
+  ipAddress: text("ipAddress"),
+  // Timestamps
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updatedAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type Complaint = typeof complaints.$inferSelect;
+export type InsertComplaint = typeof complaints.$inferInsert;
+
+// Respostas/acompanhamento das reclamações
+export const complaintResponses = sqliteTable("complaint_responses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  complaintId: integer("complaintId").notNull(),
+  userId: integer("userId"), // null = sistema
+  userName: text("userName"),
+  message: text("message").notNull(),
+  // Se é resposta interna (só admin vê) ou pública (autor vê)
+  isInternal: integer("isInternal").default(0).notNull(),
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type ComplaintResponse = typeof complaintResponses.$inferSelect;
+export type InsertComplaintResponse = typeof complaintResponses.$inferInsert;

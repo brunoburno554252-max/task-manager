@@ -22,6 +22,8 @@ const Companies = lazy(() => import("./pages/Companies"));
 const IdeasBox = lazy(() => import("./pages/IdeasBox"));
 const HighlightCollaborator = lazy(() => import("./pages/HighlightCollaborator"));
 const TaskCenter = lazy(() => import("./pages/TaskCenter"));
+const OuvidoriaCEO = lazy(() => import("./pages/OuvidoriaCEO"));
+const OuvidoriaPublica = lazy(() => import("./pages/OuvidoriaPublica"));
 
 function PageLoader() {
   return (
@@ -54,6 +56,8 @@ function Router() {
           <Route path={"/settings"} component={AdminSettings} />
           <Route path={"/ideas"} component={IdeasBox} />
           <Route path={"/highlight"} component={HighlightCollaborator} />
+          <Route path={"/ouvidoria"} component={OuvidoriaCEO} />
+          <Route path={"/ouvidoria-publica"} component={OuvidoriaPublica} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>
