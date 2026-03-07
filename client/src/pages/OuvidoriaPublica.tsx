@@ -32,7 +32,8 @@ const statusColors: Record<string, string> = {
   "Em Análise": "text-purple-500 bg-purple-500/10",
   "Resolvido": "text-emerald-500 bg-emerald-500/10",
   "Encerrado sem Resolução": "text-red-500 bg-red-500/10",
-  "Aguardando Informações": "text-amber-500 bg-amber-500/10",
+  "Aguardando Info Reclamante": "text-amber-500 bg-amber-500/10",
+  "Aguardando Solução Colaborador": "text-cyan-500 bg-cyan-500/10",
 };
 
 type View = "home" | "form" | "track" | "success";

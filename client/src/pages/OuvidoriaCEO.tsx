@@ -38,7 +38,8 @@ const statusLabels: Record<string, { label: string; color: string; icon: any }> 
   em_analise: { label: "Em Análise", color: "text-purple-500 bg-purple-500/10 border-purple-500/20", icon: Eye },
   resolvido: { label: "Resolvido", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
   encerrado_sem_resolucao: { label: "Encerrado s/ Resolução", color: "text-red-500 bg-red-500/10 border-red-500/20", icon: XCircle },
-  aguardando_informacoes: { label: "Aguardando Info", color: "text-amber-500 bg-amber-500/10 border-amber-500/20", icon: Clock },
+  aguardando_informacoes: { label: "Aguardando Info Reclamante", color: "text-amber-500 bg-amber-500/10 border-amber-500/20", icon: Clock },
+  aguardando_solucao_colaborador: { label: "Aguardando Solução Colaborador", color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20", icon: Loader2 },
 };
 
 const priorityLabels: Record<string, { label: string; color: string }> = {
@@ -278,7 +279,8 @@ function OuvidoriaTab() {
                     {c.isAnonymous === 1 && <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1"><Lock className="h-2.5 w-2.5" />Anônimo</Badge>}
                     {c.isExternal === 1 && <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1"><Globe className="h-2.5 w-2.5" />Externo</Badge>}
                   </div>
-                  <p className="font-medium text-sm truncate">{c.subject}</p>
+                  {c.involvedName && <p className="font-semibold text-sm truncate">{c.involvedName}</p>}
+                  <p className={`${c.involvedName ? 'text-xs text-muted-foreground' : 'font-medium text-sm'} truncate`}>{c.subject}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                     <span>{categoryLabels[c.category] || c.category}</span>
                     <span>{getTimeAgo(c.createdAt)}</span>

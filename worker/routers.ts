@@ -1536,7 +1536,7 @@ export const appRouter = router({
     updateStatus: adminProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(['em_analise', 'resolvido', 'encerrado_sem_resolucao', 'aguardando_informacoes']),
+        status: z.enum(['em_analise', 'resolvido', 'encerrado_sem_resolucao', 'aguardando_informacoes', 'aguardando_solucao_colaborador']),
         resolutionDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1553,7 +1553,8 @@ export const appRouter = router({
 
         const statusLabels: Record<string, string> = {
           em_analise: 'Em Análise', resolvido: 'Resolvido',
-          encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Informações',
+          encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Info Reclamante',
+          aguardando_solucao_colaborador: 'Aguardando Solução Colaborador',
         };
 
         // Notify author if not anonymous

@@ -1462,6 +1462,7 @@ export async function getComplaintStats(db: DrizzleD1Database) {
     resolvido: all.filter(c => c.status === 'resolvido').length,
     encerrado_sem_resolucao: all.filter(c => c.status === 'encerrado_sem_resolucao').length,
     aguardando_informacoes: all.filter(c => c.status === 'aguardando_informacoes').length,
+    aguardando_solucao_colaborador: all.filter(c => c.status === 'aguardando_solucao_colaborador').length,
     reclamacao: all.filter(c => c.type === 'reclamacao').length,
     sugestao: all.filter(c => c.type === 'sugestao').length,
     elogio: all.filter(c => c.type === 'elogio').length,

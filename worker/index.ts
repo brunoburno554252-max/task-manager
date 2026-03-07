@@ -98,7 +98,8 @@ app.get("/api/public/complaint/:protocol", async (c) => {
 
     const statusLabels: Record<string, string> = {
       em_analise: 'Em Análise', resolvido: 'Resolvido',
-      encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Informações',
+      encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Info Reclamante',
+      aguardando_solucao_colaborador: 'Aguardando Solução Colaborador',
     };
 
     return c.json({
