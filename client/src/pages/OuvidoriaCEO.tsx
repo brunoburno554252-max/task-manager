@@ -28,17 +28,17 @@ const typeLabels: Record<string, { label: string; color: string; icon: any }> = 
 };
 
 const categoryLabels: Record<string, string> = {
-  atendimento: "Atendimento", infraestrutura: "Infraestrutura", gestao: "Gestão",
-  comunicacao: "Comunicação", seguranca: "Segurança", outros: "Outros",
+  atraso_diploma: "Atraso Diploma", atendimento_aluno: "Atendimento Aluno",
+  atendimento_polo: "Atendimento Polo", estorno_devolucao: "Estorno ou Devolução",
+  elogio: "Elogio", procon: "Procon", judicial: "Judicial",
+  colaborador: "Colaborador", interno: "Interno", outros: "Outros",
 };
 
 const statusLabels: Record<string, { label: string; color: string; icon: any }> = {
-  novo: { label: "Novo", color: "text-blue-500 bg-blue-500/10 border-blue-500/20", icon: Clock },
   em_analise: { label: "Em Análise", color: "text-purple-500 bg-purple-500/10 border-purple-500/20", icon: Eye },
-  em_andamento: { label: "Em Andamento", color: "text-amber-500 bg-amber-500/10 border-amber-500/20", icon: Loader2 },
-  respondido: { label: "Respondido", color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20", icon: MessageSquare },
-  concluido: { label: "Concluído", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
-  arquivado: { label: "Arquivado", color: "text-muted-foreground bg-muted/30 border-border", icon: Archive },
+  resolvido: { label: "Resolvido", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
+  encerrado_sem_resolucao: { label: "Encerrado s/ Resolução", color: "text-red-500 bg-red-500/10 border-red-500/20", icon: XCircle },
+  aguardando_informacoes: { label: "Aguardando Info", color: "text-amber-500 bg-amber-500/10 border-amber-500/20", icon: Clock },
 };
 
 const priorityLabels: Record<string, { label: string; color: string }> = {
@@ -155,11 +155,14 @@ function OuvidoriaTab() {
   const [formOccurrenceDate, setFormOccurrenceDate] = useState("");
   const [formOccurrenceLocation, setFormOccurrenceLocation] = useState("");
   const [formIsAnonymous, setFormIsAnonymous] = useState(false);
+  const [formInvolvedName, setFormInvolvedName] = useState("");
+  const [formInvolvedPhone, setFormInvolvedPhone] = useState("");
 
   const resetForm = () => {
     setFormType("reclamacao"); setFormCategory("outros"); setFormPriority("media");
     setFormSubject(""); setFormDescription(""); setFormOccurrenceDate("");
     setFormOccurrenceLocation(""); setFormIsAnonymous(false);
+    setFormInvolvedName(""); setFormInvolvedPhone("");
   };
 
   const { data: detail, refetch: refetchDetail } = trpc.complaints.getById.useQuery(
@@ -346,6 +349,16 @@ function OuvidoriaTab() {
                 <Input placeholder="Onde ocorreu?" value={formOccurrenceLocation} onChange={(e) => setFormOccurrenceLocation(e.target.value)} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1"><User className="h-3 w-3" />Nome Envolvido</label>
+                <Input placeholder="Nome da pessoa envolvida" value={formInvolvedName} onChange={(e) => setFormInvolvedName(e.target.value)} maxLength={200} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1"><Phone className="h-3 w-3" />Telefone Envolvido</label>
+                <Input placeholder="(00) 00000-0000" value={formInvolvedPhone} onChange={(e) => setFormInvolvedPhone(e.target.value)} maxLength={50} />
+              </div>
+            </div>
             <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/40">
               <input type="checkbox" id="anonymous" checked={formIsAnonymous} onChange={(e) => setFormIsAnonymous(e.target.checked)} className="h-4 w-4 rounded border-border" />
               <label htmlFor="anonymous" className="text-sm cursor-pointer">
@@ -362,6 +375,8 @@ function OuvidoriaTab() {
               occurrenceDate: formOccurrenceDate || undefined,
               occurrenceLocation: formOccurrenceLocation || undefined,
               isAnonymous: formIsAnonymous,
+              involvedName: formInvolvedName || undefined,
+              involvedPhone: formInvolvedPhone || undefined,
             })} disabled={createMutation.isPending || !formSubject.trim() || formDescription.trim().length < 3}>
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
               Enviar Registro
@@ -417,6 +432,9 @@ function OuvidoriaTab() {
                 {detail.occurrenceLocation && <div className="flex items-center gap-2 text-sm"><MapPin className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Local:</span><span className="font-medium">{detail.occurrenceLocation}</span></div>}
                 {isAdmin && detail.authorName && detail.isAnonymous !== 1 && <div className="flex items-center gap-2 text-sm"><User className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Autor:</span><span className="font-medium">{detail.authorName}</span>{detail.authorEmail && <span className="text-muted-foreground">({detail.authorEmail})</span>}</div>}
                 {isAdmin && detail.ipAddress && <div className="flex items-center gap-2 text-sm"><Globe className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">IP:</span><span className="font-mono text-xs">{detail.ipAddress}</span></div>}
+                {detail.involvedName && <div className="flex items-center gap-2 text-sm"><User className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Envolvido:</span><span className="font-medium">{detail.involvedName}</span></div>}
+                {detail.involvedPhone && <div className="flex items-center gap-2 text-sm"><Phone className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Tel. Envolvido:</span><span className="font-medium">{detail.involvedPhone}</span></div>}
+                {detail.resolutionDate && <div className="flex items-center gap-2 text-sm"><Calendar className="h-4 w-4 text-emerald-500" /><span className="text-muted-foreground">Data da Resolução:</span><span className="font-medium text-emerald-500">{new Date(detail.resolutionDate).toLocaleDateString("pt-BR")}</span></div>}
                 <div className="flex items-center gap-2 text-sm"><Clock className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Registrado em:</span><span className="font-medium">{new Date(detail.createdAt).toLocaleString("pt-BR")}</span></div>
               </div>
               <div className="mt-4 p-4 rounded-xl bg-muted/20 border border-border/30">
@@ -455,7 +473,7 @@ function OuvidoriaTab() {
                   </div>
                 </div>
               </div>
-              {isAdmin && detail.status !== "concluido" && (
+              {isAdmin && detail.status !== "resolvido" && (
                 <div className="mt-4 pt-4 border-t border-border/30 flex gap-2">
                   <Button variant="outline" className="text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => setShowResolve(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Concluir com Resolução</Button>
                   <Button variant="outline" className="text-red-500 border-red-500/30 hover:bg-red-500/10" onClick={() => { if (confirm("Excluir permanentemente este registro?")) deleteMutation.mutate({ id: detail.id }); }}><XCircle className="h-4 w-4 mr-2" /> Excluir</Button>

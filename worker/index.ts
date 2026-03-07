@@ -23,7 +23,7 @@ app.route("/api/auth", auth);
 app.post("/api/public/complaint", async (c) => {
   try {
     const body = await c.req.json();
-    const { type, category, subject, description, occurrenceDate, occurrenceLocation, authorName, authorEmail, authorPhone, isAnonymous } = body;
+    const { type, category, subject, description, occurrenceDate, occurrenceLocation, authorName, authorEmail, authorPhone, isAnonymous, involvedName, involvedPhone } = body;
 
     if (!type || !category || !subject || !description) {
       return c.json({ error: 'Campos obrigatórios: type, category, subject, description' }, 400);
@@ -58,6 +58,8 @@ app.post("/api/public/complaint", async (c) => {
       isAnonymous: isAnonymous !== false,
       isExternal: true,
       ipAddress: ip,
+      involvedName: involvedName || null,
+      involvedPhone: involvedPhone || null,
     });
 
     // Notify all admins
@@ -95,8 +97,8 @@ app.get("/api/public/complaint/:protocol", async (c) => {
     const responses = await getComplaintResponses(db, complaint.id, false); // Only public responses
 
     const statusLabels: Record<string, string> = {
-      novo: 'Novo', em_analise: 'Em Análise', em_andamento: 'Em Andamento',
-      respondido: 'Respondido', concluido: 'Concluído', arquivado: 'Arquivado',
+      em_analise: 'Em Análise', resolvido: 'Resolvido',
+      encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Informações',
     };
 
     return c.json({

@@ -22,17 +22,17 @@ const typeLabels: Record<string, { label: string; icon: any; color: string }> = 
 };
 
 const categoryLabels: Record<string, string> = {
-  atendimento: "Atendimento", infraestrutura: "Infraestrutura", gestao: "Gestão",
-  comunicacao: "Comunicação", seguranca: "Segurança", outros: "Outros",
+  atraso_diploma: "Atraso Diploma", atendimento_aluno: "Atendimento Aluno",
+  atendimento_polo: "Atendimento Polo", estorno_devolucao: "Estorno ou Devolução",
+  elogio: "Elogio", procon: "Procon", judicial: "Judicial",
+  colaborador: "Colaborador", interno: "Interno", outros: "Outros",
 };
 
 const statusColors: Record<string, string> = {
-  Novo: "text-blue-500 bg-blue-500/10",
   "Em Análise": "text-purple-500 bg-purple-500/10",
-  "Em Andamento": "text-amber-500 bg-amber-500/10",
-  Respondido: "text-cyan-500 bg-cyan-500/10",
-  Concluído: "text-emerald-500 bg-emerald-500/10",
-  Arquivado: "text-muted-foreground bg-muted/30",
+  "Resolvido": "text-emerald-500 bg-emerald-500/10",
+  "Encerrado sem Resolução": "text-red-500 bg-red-500/10",
+  "Aguardando Informações": "text-amber-500 bg-amber-500/10",
 };
 
 type View = "home" | "form" | "track" | "success";
@@ -53,6 +53,8 @@ export default function OuvidoriaPublica() {
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPhone, setFormPhone] = useState("");
+  const [formInvolvedName, setFormInvolvedName] = useState("");
+  const [formInvolvedPhone, setFormInvolvedPhone] = useState("");
 
   // Success state
   const [protocol, setProtocol] = useState("");
@@ -66,6 +68,7 @@ export default function OuvidoriaPublica() {
     setFormType("reclamacao"); setFormCategory("outros"); setFormSubject("");
     setFormDescription(""); setFormOccurrenceDate(""); setFormOccurrenceLocation("");
     setFormIsAnonymous(true); setFormName(""); setFormEmail(""); setFormPhone("");
+    setFormInvolvedName(""); setFormInvolvedPhone("");
     setError("");
   };
 
@@ -91,6 +94,8 @@ export default function OuvidoriaPublica() {
           authorName: formIsAnonymous ? undefined : formName,
           authorEmail: formIsAnonymous ? undefined : formEmail,
           authorPhone: formIsAnonymous ? undefined : formPhone,
+          involvedName: formInvolvedName || undefined,
+          involvedPhone: formInvolvedPhone || undefined,
         }),
       });
       const data = await res.json();
@@ -249,6 +254,23 @@ export default function OuvidoriaPublica() {
                   </label>
                   <Input placeholder="Onde ocorreu?" value={formOccurrenceLocation}
                     onChange={(e) => setFormOccurrenceLocation(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1">
+                    <User className="h-3 w-3" /> Nome Envolvido
+                  </label>
+                  <Input placeholder="Nome da pessoa envolvida" value={formInvolvedName}
+                    onChange={(e) => setFormInvolvedName(e.target.value)} maxLength={200} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1">
+                    <Phone className="h-3 w-3" /> Telefone Envolvido
+                  </label>
+                  <Input placeholder="(00) 00000-0000" value={formInvolvedPhone}
+                    onChange={(e) => setFormInvolvedPhone(e.target.value)} maxLength={50} />
                 </div>
               </div>
 

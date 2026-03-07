@@ -1477,13 +1477,15 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         type: z.enum(['reclamacao', 'sugestao', 'elogio', 'denuncia']),
-        category: z.enum(['atendimento', 'infraestrutura', 'gestao', 'comunicacao', 'seguranca', 'outros']),
+        category: z.enum(['atraso_diploma', 'atendimento_aluno', 'atendimento_polo', 'estorno_devolucao', 'elogio', 'procon', 'judicial', 'colaborador', 'interno', 'outros']),
         priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
         subject: z.string().min(3).max(500),
         description: z.string().min(3).max(10000),
         occurrenceDate: z.string().optional(),
         occurrenceLocation: z.string().max(500).optional(),
         isAnonymous: z.boolean().optional(),
+        involvedName: z.string().max(200).optional(),
+        involvedPhone: z.string().max(50).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const protocol = await generateProtocol(ctx.db);
@@ -1500,6 +1502,8 @@ export const appRouter = router({
           authorName: input.isAnonymous ? null : ctx.user.name,
           isAnonymous: input.isAnonymous || false,
           isExternal: false,
+          involvedName: input.involvedName || null,
+          involvedPhone: input.involvedPhone || null,
         });
 
         // Notify all admins
@@ -1530,16 +1534,24 @@ export const appRouter = router({
     updateStatus: adminProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(['novo', 'em_analise', 'em_andamento', 'respondido', 'concluido', 'arquivado']),
+        status: z.enum(['em_analise', 'resolvido', 'encerrado_sem_resolucao', 'aguardando_informacoes']),
+        resolutionDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const complaint = await getComplaintById(ctx.db, input.id);
-        if (!complaint) throw new Error('N\u00e3o encontrada');
-        await updateComplaint(ctx.db, input.id, { status: input.status });
+        if (!complaint) throw new Error('Não encontrada');
+        const updateData: any = { status: input.status };
+        if (input.status === 'resolvido' && input.resolutionDate) {
+          updateData.resolutionDate = input.resolutionDate;
+        }
+        if (input.status === 'resolvido' && !input.resolutionDate) {
+          updateData.resolutionDate = new Date().toISOString();
+        }
+        await updateComplaint(ctx.db, input.id, updateData);
 
         const statusLabels: Record<string, string> = {
-          novo: 'Novo', em_analise: 'Em An\u00e1lise', em_andamento: 'Em Andamento',
-          respondido: 'Respondido', concluido: 'Conclu\u00eddo', arquivado: 'Arquivado',
+          em_analise: 'Em Análise', resolvido: 'Resolvido',
+          encerrado_sem_resolucao: 'Encerrado sem Resolução', aguardando_informacoes: 'Aguardando Informações',
         };
 
         // Notify author if not anonymous
@@ -1583,11 +1595,12 @@ export const appRouter = router({
         const complaint = await getComplaintById(ctx.db, input.id);
         if (!complaint) throw new Error('N\u00e3o encontrada');
 
-        await updateComplaint(ctx.db, input.id, {
-          status: 'concluido',
+          await updateComplaint(ctx.db, input.id, {
+          status: 'resolvido',
           resolution: input.resolution,
           resolvedAt: new Date().toISOString(),
           resolvedById: ctx.user.id,
+          resolutionDate: new Date().toISOString(),
         });
 
         // Notify author
@@ -1595,8 +1608,8 @@ export const appRouter = router({
           await createNotification(ctx.db, {
             userId: complaint.authorId,
             type: 'complaint_resolved',
-            title: 'Ouvidoria: Seu registro foi conclu\u00eddo',
-            message: `Seu registro [${complaint.protocol}] "${complaint.subject}" foi conclu\u00eddo com resolu\u00e7\u00e3o.`,
+            title: 'Ouvidoria: Seu registro foi resolvido',
+            message: `Seu registro [${complaint.protocol}] "${complaint.subject}" foi resolvido.`,
             entityType: 'complaint',
             entityId: complaint.id,
           });

@@ -1301,12 +1301,15 @@ export async function createComplaint(db: DrizzleD1Database, data: {
   isAnonymous?: boolean;
   isExternal?: boolean;
   ipAddress?: string | null;
+  involvedName?: string | null;
+  involvedPhone?: string | null;
 }) {
   const result = await db.insert(complaints).values({
     protocol: data.protocol,
     type: data.type as any,
     category: data.category as any,
     priority: (data.priority || 'media') as any,
+    status: 'em_analise' as any,
     subject: data.subject,
     description: data.description,
     occurrenceDate: data.occurrenceDate || null,
@@ -1318,6 +1321,8 @@ export async function createComplaint(db: DrizzleD1Database, data: {
     isAnonymous: data.isAnonymous ? 1 : 0,
     isExternal: data.isExternal ? 1 : 0,
     ipAddress: data.ipAddress || null,
+    involvedName: data.involvedName || null,
+    involvedPhone: data.involvedPhone || null,
   }).returning();
   return result[0];
 }
@@ -1375,6 +1380,9 @@ export async function updateComplaint(db: DrizzleD1Database, id: number, data: P
   resolution: string | null;
   resolvedAt: string | null;
   resolvedById: number | null;
+  involvedName: string | null;
+  involvedPhone: string | null;
+  resolutionDate: string | null;
 }>) {
   const updateData: any = { ...data, updatedAt: new Date().toISOString() };
   await db.update(complaints).set(updateData).where(eq(complaints.id, id));
@@ -1418,12 +1426,10 @@ export async function getComplaintStats(db: DrizzleD1Database) {
   const all = await db.select().from(complaints);
   return {
     total: all.length,
-    novo: all.filter(c => c.status === 'novo').length,
     em_analise: all.filter(c => c.status === 'em_analise').length,
-    em_andamento: all.filter(c => c.status === 'em_andamento').length,
-    respondido: all.filter(c => c.status === 'respondido').length,
-    concluido: all.filter(c => c.status === 'concluido').length,
-    arquivado: all.filter(c => c.status === 'arquivado').length,
+    resolvido: all.filter(c => c.status === 'resolvido').length,
+    encerrado_sem_resolucao: all.filter(c => c.status === 'encerrado_sem_resolucao').length,
+    aguardando_informacoes: all.filter(c => c.status === 'aguardando_informacoes').length,
     reclamacao: all.filter(c => c.type === 'reclamacao').length,
     sugestao: all.filter(c => c.type === 'sugestao').length,
     elogio: all.filter(c => c.type === 'elogio').length,

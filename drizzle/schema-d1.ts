@@ -277,12 +277,17 @@ export const complaints = sqliteTable("complaints", {
   protocol: text("protocol").notNull().unique(),
   // Tipo: reclamacao, sugestao, elogio, denuncia
   type: text("type", { enum: ["reclamacao", "sugestao", "elogio", "denuncia"] }).default("reclamacao").notNull(),
-  // Categoria: atendimento, infraestrutura, gestao, comunicacao, seguranca, outros
-  category: text("category", { enum: ["atendimento", "infraestrutura", "gestao", "comunicacao", "seguranca", "outros"] }).default("outros").notNull(),
+  // Categoria
+  category: text("category", { enum: ["atraso_diploma", "atendimento_aluno", "atendimento_polo", "estorno_devolucao", "elogio", "procon", "judicial", "colaborador", "interno", "outros"] }).default("outros").notNull(),
   // Prioridade
   priority: text("priority", { enum: ["baixa", "media", "alta", "urgente"] }).default("media").notNull(),
   // Status do andamento
-  status: text("status", { enum: ["novo", "em_analise", "em_andamento", "respondido", "concluido", "arquivado"] }).default("novo").notNull(),
+  status: text("status", { enum: ["em_analise", "resolvido", "encerrado_sem_resolucao", "aguardando_informacoes"] }).default("em_analise").notNull(),
+  // Nome e telefone do envolvido
+  involvedName: text("involvedName"),
+  involvedPhone: text("involvedPhone"),
+  // Data da resolução
+  resolutionDate: text("resolutionDate"),
   // Assunto e descrição detalhada
   subject: text("subject").notNull(),
   description: text("description").notNull(),
