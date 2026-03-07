@@ -264,7 +264,7 @@ function OuvidoriaTab() {
         ) : (
           filtered.map((c: any) => {
             const typeInfo = typeLabels[c.type] || typeLabels.reclamacao;
-            const statusInfo = statusLabels[c.status] || statusLabels.novo;
+            const statusInfo = statusLabels[c.status] || statusLabels.em_analise;
             const priorityInfo = priorityLabels[c.priority] || priorityLabels.media;
             const TypeIcon = typeInfo.icon;
             const StatusIcon = statusInfo.icon;
