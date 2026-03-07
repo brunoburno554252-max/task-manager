@@ -29,7 +29,7 @@ import {
   LayoutDashboard, Columns3, Trophy, Award, Building2,
   Activity, LogOut, PanelLeft, User, Users, Zap, MessageCircle, Sun, Moon, Settings,
   Bell, CheckCircle2, Eye, XCircle, Clock, Loader2, Lightbulb, Star,
-  AlertTriangle, ArrowRightLeft, UserPlus, UserX, Trash2, Volume2, Megaphone,
+  AlertTriangle, ArrowRightLeft, UserPlus, UserX, Trash2, Volume2, Megaphone, ScrollText,
 } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -50,6 +50,7 @@ const menuItems = [
   { icon: Lightbulb, label: "Caixa de Ideias", path: "/ideas" },
   { icon: Star, label: "Colaborador Destaque", path: "/highlight" },
   { icon: Megaphone, label: "Ouvidoria CEO", path: "/ouvidoria" },
+  { icon: ScrollText, label: "Logs", path: "/logs", adminOnly: true },
   { icon: Settings, label: "Configurações", path: "/settings", adminOnly: true },
 ];
 

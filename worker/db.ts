@@ -8,6 +8,7 @@ import {
   notifications, pointsAudit, ideas, highlightPoints, taskLogs, accessLogs,
   complaints, complaintResponses,
   externalTickets, externalTicketNotes,
+  pointTransactions,
 } from "../drizzle/schema-d1";
 
 export type Env = {
@@ -301,17 +302,35 @@ export async function setTaskAssignees(db: DrizzleD1Database, taskId: number, us
 
 // ============ POINTS ============
 
-export async function addPoints(db: DrizzleD1Database, userId: number, points: number, reason: string, taskId?: number) {
+export async function addPoints(db: DrizzleD1Database, userId: number, points: number, reason: string, taskId?: number, extras?: { type?: string; taskTitle?: string; performedBy?: number; performedByName?: string }) {
+  // 1. Manter o log antigo para compatibilidade
   await db.insert(pointsLog).values({
     userId,
     points,
     reason,
     taskId: taskId ?? null,
   });
-  await db.update(users).set({
-    totalPoints: sql`${users.totalPoints} + ${points}`,
-    updatedAt: new Date().toISOString(),
-  }).where(eq(users.id, userId));
+
+  // 2. SISTEMA BRUTO: registrar transação atômica com snapshot de saldo
+  try {
+    await createPointTransaction(db, {
+      userId,
+      amount: points,
+      type: extras?.type || (points >= 0 ? "task_completion" : "task_revert"),
+      taskId: taskId ?? null,
+      taskTitle: extras?.taskTitle ?? null,
+      reason,
+      performedBy: extras?.performedBy ?? null,
+      performedByName: extras?.performedByName ?? null,
+    });
+  } catch (e) {
+    // Fallback: se o novo sistema falhar, pelo menos atualiza o saldo antigo
+    console.error("POINT_TRANSACTION_ERROR:", e);
+    await db.update(users).set({
+      totalPoints: sql`MAX(0, ${users.totalPoints} + ${points})`,
+      updatedAt: new Date().toISOString(),
+    }).where(eq(users.id, userId));
+  }
 }
 
 export async function getUserPoints(db: DrizzleD1Database, userId: number) {
@@ -321,17 +340,30 @@ export async function getUserPoints(db: DrizzleD1Database, userId: number) {
     .limit(50);
 }
 
-export async function revertPointsByTaskId(db: DrizzleD1Database, taskId: number) {
+export async function revertPointsByTaskId(db: DrizzleD1Database, taskId: number, performedBy?: number, performedByName?: string) {
   // Find all points_log entries for this task
   const entries = await db.select().from(pointsLog)
     .where(eq(pointsLog.taskId, taskId));
   
-  // Subtract points from each user's totalPoints
+  // Subtract points from each user and register in point_transactions
   for (const entry of entries) {
-    await db.update(users).set({
-      totalPoints: sql`MAX(0, ${users.totalPoints} - ${entry.points})`,
-      updatedAt: new Date().toISOString(),
-    }).where(eq(users.id, entry.userId));
+    try {
+      await createPointTransaction(db, {
+        userId: entry.userId,
+        amount: -entry.points,
+        type: "task_revert",
+        taskId,
+        reason: `Pontos revertidos: ${entry.reason}`,
+        performedBy: performedBy ?? null,
+        performedByName: performedByName ?? "Sistema",
+      });
+    } catch (e) {
+      console.error("REVERT_POINT_TRANSACTION_ERROR:", e);
+      await db.update(users).set({
+        totalPoints: sql`MAX(0, ${users.totalPoints} - ${entry.points})`,
+        updatedAt: new Date().toISOString(),
+      }).where(eq(users.id, entry.userId));
+    }
   }
   
   // Delete the points_log entries for this task
@@ -1564,4 +1596,177 @@ export async function getExternalTicketStats(db: DrizzleD1Database) {
     stats[t.channel] = (stats[t.channel] || 0) + 1;
   }
   return stats;
+}
+
+
+// ===== SISTEMA BRUTO DE PONTOS =====
+
+// Registrar transação de pontos (ATÔMICO: registra + atualiza saldo)
+export async function createPointTransaction(db: DrizzleD1Database, data: {
+  userId: number;
+  userName?: string;
+  amount: number;
+  type: string;
+  taskId?: number | null;
+  taskTitle?: string | null;
+  reason: string;
+  performedBy?: number | null;
+  performedByName?: string | null;
+  metadata?: string | null;
+}) {
+  // 1. Buscar saldo ATUAL do usuário
+  const [user] = await db.select({ totalPoints: users.totalPoints, name: users.name })
+    .from(users).where(eq(users.id, data.userId));
+  if (!user) throw new Error(`Usuário ${data.userId} não encontrado`);
+
+  const balanceBefore = user.totalPoints || 0;
+  const balanceAfter = Math.max(0, balanceBefore + data.amount);
+
+  // 2. Registrar transação com snapshot do saldo
+  const [transaction] = await db.insert(pointTransactions).values({
+    userId: data.userId,
+    userName: data.userName || user.name || "Desconhecido",
+    amount: data.amount,
+    balanceBefore,
+    balanceAfter,
+    type: data.type as any,
+    taskId: data.taskId ?? null,
+    taskTitle: data.taskTitle ?? null,
+    reason: data.reason,
+    performedBy: data.performedBy ?? null,
+    performedByName: data.performedByName ?? null,
+    metadata: data.metadata ?? null,
+  }).returning();
+
+  // 3. Atualizar saldo do usuário
+  await db.update(users).set({
+    totalPoints: balanceAfter,
+    updatedAt: new Date().toISOString(),
+  }).where(eq(users.id, data.userId));
+
+  return { transaction, balanceBefore, balanceAfter };
+}
+
+// Recalcular pontos de um usuário a partir de TODAS as transações
+export async function recalculateUserPoints(db: DrizzleD1Database, userId: number) {
+  const transactions = await db.select({ amount: pointTransactions.amount })
+    .from(pointTransactions).where(eq(pointTransactions.userId, userId));
+  
+  const total = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const finalTotal = Math.max(0, total);
+
+  await db.update(users).set({
+    totalPoints: finalTotal,
+    updatedAt: new Date().toISOString(),
+  }).where(eq(users.id, userId));
+
+  return { userId, calculatedTotal: finalTotal, transactionCount: transactions.length };
+}
+
+// Recalcular pontos de TODOS os usuários
+export async function recalculateAllPoints(db: DrizzleD1Database) {
+  const allUsers = await db.select({ id: users.id }).from(users);
+  const results = [];
+  for (const u of allUsers) {
+    const result = await recalculateUserPoints(db, u.id);
+    results.push(result);
+  }
+  return results;
+}
+
+// Listar transações com filtros
+export async function listPointTransactions(db: DrizzleD1Database, filters?: {
+  userId?: number;
+  type?: string;
+  taskId?: number;
+  limit?: number;
+  offset?: number;
+}) {
+  let query = db.select().from(pointTransactions);
+  const conditions = [];
+
+  if (filters?.userId) conditions.push(eq(pointTransactions.userId, filters.userId));
+  if (filters?.type) conditions.push(eq(pointTransactions.type, filters.type as any));
+  if (filters?.taskId) conditions.push(eq(pointTransactions.taskId, filters.taskId));
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  return (query as any)
+    .orderBy(desc(pointTransactions.createdAt))
+    .limit(filters?.limit ?? 200)
+    .offset(filters?.offset ?? 0);
+}
+
+// Obter resumo de pontos por usuário
+export async function getPointsSummary(db: DrizzleD1Database, userId: number) {
+  const transactions = await db.select().from(pointTransactions)
+    .where(eq(pointTransactions.userId, userId))
+    .orderBy(desc(pointTransactions.createdAt));
+
+  const gained = transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const lost = transactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const [user] = await db.select({ totalPoints: users.totalPoints, name: users.name })
+    .from(users).where(eq(users.id, userId));
+
+  return {
+    userId,
+    userName: user?.name || "Desconhecido",
+    currentBalance: user?.totalPoints || 0,
+    totalGained: gained,
+    totalLost: lost,
+    transactionCount: transactions.length,
+    lastTransaction: transactions[0] || null,
+    transactions,
+  };
+}
+
+// Obter todas as transações (admin - para a página de logs)
+export async function getAllPointTransactions(db: DrizzleD1Database, limit = 500) {
+  return db.select().from(pointTransactions)
+    .orderBy(desc(pointTransactions.createdAt))
+    .limit(limit);
+}
+
+// Migrar dados do points_log antigo para point_transactions
+export async function migrateOldPointsLog(db: DrizzleD1Database) {
+  const oldLogs = await db.select().from(pointsLog).orderBy(pointsLog.createdAt);
+  let migrated = 0;
+
+  for (const log of oldLogs) {
+    // Verificar se já foi migrado (evitar duplicatas)
+    const existing = await db.select({ id: pointTransactions.id }).from(pointTransactions)
+      .where(and(
+        eq(pointTransactions.userId, log.userId),
+        eq(pointTransactions.reason, log.reason),
+        eq(pointTransactions.amount, log.points),
+      )).limit(1);
+
+    if (existing.length === 0) {
+      const [user] = await db.select({ totalPoints: users.totalPoints, name: users.name })
+        .from(users).where(eq(users.id, log.userId));
+
+      await db.insert(pointTransactions).values({
+        userId: log.userId,
+        userName: user?.name || "Desconhecido",
+        amount: log.points,
+        balanceBefore: 0, // não temos o snapshot antigo
+        balanceAfter: 0,  // será recalculado
+        type: log.points >= 0 ? "task_completion" : "task_revert",
+        taskId: log.taskId,
+        taskTitle: null,
+        reason: log.reason,
+        performedBy: null,
+        performedByName: "Sistema (migração)",
+        metadata: JSON.stringify({ migratedFrom: "points_log", originalId: log.id }),
+        createdAt: log.createdAt,
+      });
+      migrated++;
+    }
+  }
+
+  // Recalcular todos os saldos
+  await recalculateAllPoints(db);
+  return { migrated, total: oldLogs.length };
 }

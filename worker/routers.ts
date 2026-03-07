@@ -28,6 +28,8 @@ import {
   generateTicketProtocol, createExternalTicket, listExternalTickets, getExternalTicketById,
   updateExternalTicketStatus, updateExternalTicket, deleteExternalTicket,
   addTicketNote, getTicketNotes, getExternalTicketStats,
+  createPointTransaction, listPointTransactions, getPointsSummary, getAllPointTransactions,
+  recalculateUserPoints, recalculateAllPoints, migrateOldPointsLog,
 } from "./db";
 
 function calculatePoints(priority: string, onTime: boolean): number {
@@ -1839,6 +1841,127 @@ export const appRouter = router({
         });
         return note;
       }),
+  }),
+
+  // ===== SISTEMA BRUTO DE PONTOS =====
+  pointTransactions: router({
+    // Listar todas as transações (admin)
+    list: adminProcedure.input(z.object({
+      userId: z.number().optional(),
+      type: z.string().optional(),
+      taskId: z.number().optional(),
+      limit: z.number().optional(),
+      offset: z.number().optional(),
+    }).optional()).query(async ({ ctx, input }) => {
+      return listPointTransactions(ctx.db, input ?? {});
+    }),
+
+    // Todas as transações (admin)
+    all: adminProcedure.input(z.object({
+      limit: z.number().optional(),
+    }).optional()).query(async ({ ctx, input }) => {
+      return getAllPointTransactions(ctx.db, input?.limit ?? 500);
+    }),
+
+    // Resumo por colaborador
+    summary: protectedProcedure.input(z.object({
+      userId: z.number(),
+    })).query(async ({ ctx, input }) => {
+      return getPointsSummary(ctx.db, input.userId);
+    }),
+
+    // Admin adicionar pontos manualmente
+    manualAdd: adminProcedure.input(z.object({
+      userId: z.number(),
+      amount: z.number().min(1),
+      reason: z.string().min(1),
+      taskId: z.number().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const result = await createPointTransaction(ctx.db, {
+        userId: input.userId,
+        amount: input.amount,
+        type: "manual_add",
+        taskId: input.taskId ?? null,
+        reason: input.reason,
+        performedBy: ctx.user.id,
+        performedByName: ctx.user.name || "Admin",
+      });
+
+      // Notificar o colaborador
+      const [targetUser] = await ctx.db.select({ name: users.name }).from(users).where(eq(users.id, input.userId));
+      await createNotification(ctx.db, {
+        userId: input.userId,
+        type: "points_awarded",
+        title: "Pontos adicionados",
+        message: `Você recebeu +${input.amount} pontos: ${input.reason}`,
+      });
+
+      return result;
+    }),
+
+    // Admin remover pontos manualmente
+    manualRemove: adminProcedure.input(z.object({
+      userId: z.number(),
+      amount: z.number().min(1),
+      reason: z.string().min(1),
+    })).mutation(async ({ ctx, input }) => {
+      const result = await createPointTransaction(ctx.db, {
+        userId: input.userId,
+        amount: -input.amount,
+        type: "manual_remove",
+        reason: input.reason,
+        performedBy: ctx.user.id,
+        performedByName: ctx.user.name || "Admin",
+      });
+
+      await createNotification(ctx.db, {
+        userId: input.userId,
+        type: "points_awarded",
+        title: "Pontos removidos",
+        message: `Foram removidos ${input.amount} pontos: ${input.reason}`,
+      });
+
+      return result;
+    }),
+
+    // Admin ajustar saldo manualmente
+    manualAdjust: adminProcedure.input(z.object({
+      userId: z.number(),
+      newBalance: z.number().min(0),
+      reason: z.string().min(1),
+    })).mutation(async ({ ctx, input }) => {
+      const [user] = await ctx.db.select({ totalPoints: users.totalPoints }).from(users).where(eq(users.id, input.userId));
+      const currentBalance = user?.totalPoints || 0;
+      const diff = input.newBalance - currentBalance;
+
+      const result = await createPointTransaction(ctx.db, {
+        userId: input.userId,
+        amount: diff,
+        type: "manual_adjust",
+        reason: `Ajuste manual: ${input.reason} (de ${currentBalance} para ${input.newBalance})`,
+        performedBy: ctx.user.id,
+        performedByName: ctx.user.name || "Admin",
+      });
+
+      return result;
+    }),
+
+    // Recalcular pontos de um usuário
+    recalculate: adminProcedure.input(z.object({
+      userId: z.number(),
+    })).mutation(async ({ ctx, input }) => {
+      return recalculateUserPoints(ctx.db, input.userId);
+    }),
+
+    // Recalcular pontos de TODOS
+    recalculateAll: adminProcedure.mutation(async ({ ctx }) => {
+      return recalculateAllPoints(ctx.db);
+    }),
+
+    // Migrar dados antigos do points_log
+    migrate: adminProcedure.mutation(async ({ ctx }) => {
+      return migrateOldPointsLog(ctx.db);
+    }),
   }),
 });
 export type AppRouter = typeof appRouter;

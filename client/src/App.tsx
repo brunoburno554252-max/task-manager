@@ -24,6 +24,7 @@ const HighlightCollaborator = lazy(() => import("./pages/HighlightCollaborator")
 const TaskCenter = lazy(() => import("./pages/TaskCenter"));
 const OuvidoriaCEO = lazy(() => import("./pages/OuvidoriaCEO"));
 const OuvidoriaPublica = lazy(() => import("./pages/OuvidoriaPublica"));
+const LogsAdmin = lazy(() => import("./pages/LogsAdmin"));
 
 function PageLoader() {
   return (
@@ -58,6 +59,7 @@ function Router() {
           <Route path={"/highlight"} component={HighlightCollaborator} />
           <Route path={"/ouvidoria"} component={OuvidoriaCEO} />
           <Route path={"/ouvidoria-publica"} component={OuvidoriaPublica} />
+          <Route path={"/logs"} component={LogsAdmin} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

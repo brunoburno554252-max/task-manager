@@ -393,3 +393,33 @@ export const externalTicketNotes = sqliteTable("external_ticket_notes", {
 
 export type ExternalTicketNote = typeof externalTicketNotes.$inferSelect;
 export type InsertExternalTicketNote = typeof externalTicketNotes.$inferInsert;
+
+// ===== SISTEMA BRUTO DE PONTOS =====
+export const pointTransactions = sqliteTable("point_transactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  userName: text("userName"), // snapshot do nome no momento
+  amount: integer("amount").notNull(), // positivo = ganho, negativo = perda
+  balanceBefore: integer("balanceBefore").notNull(), // saldo ANTES da transação
+  balanceAfter: integer("balanceAfter").notNull(), // saldo DEPOIS da transação
+  type: text("type", { enum: [
+    "task_completion", // ganhou pontos por completar tarefa
+    "task_overdue_penalty", // perdeu pontos por atraso
+    "task_revert", // pontos revertidos (tarefa rejeitada, etc)
+    "manual_add", // admin adicionou manualmente
+    "manual_remove", // admin removeu manualmente
+    "manual_adjust", // admin ajustou manualmente
+    "highlight_bonus", // bônus de destaque
+    "achievement_bonus", // bônus de conquista
+    "correction", // correção de inconsistência
+  ] }).notNull(),
+  taskId: integer("taskId"), // referência à tarefa (se aplicável)
+  taskTitle: text("taskTitle"), // snapshot do título da tarefa
+  reason: text("reason").notNull(), // descrição detalhada
+  performedBy: integer("performedBy"), // quem executou (admin ID, ou null se sistema)
+  performedByName: text("performedByName"), // snapshot do nome de quem executou
+  metadata: text("metadata"), // JSON com dados extras (prioridade, prazo, etc)
+  createdAt: text("createdAt").notNull().$defaultFn(() => new Date().toISOString()),
+});
+export type PointTransaction = typeof pointTransactions.$inferSelect;
+export type InsertPointTransaction = typeof pointTransactions.$inferInsert;
